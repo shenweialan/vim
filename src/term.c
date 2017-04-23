@@ -1,4 +1,4 @@
-/* vi:set ts=8 sts=4 sw=4:
+/* vi:set ts=8 sts=4 sw=4 noet:
  *
  * VIM - Vi IMproved	by Bram Moolenaar
  *
@@ -77,9 +77,6 @@ struct builtin_term
 static struct builtin_term *find_builtin_term(char_u *name);
 static void parse_builtin_tcap(char_u *s);
 static void term_color(char_u *s, int n);
-#ifdef FEAT_TERMGUICOLORS
-static void term_rgb_color(char_u *s, long_u rgb);
-#endif
 static void gather_termleader(void);
 #ifdef FEAT_TERMRESPONSE
 static void req_codes_from_term(void);
@@ -395,7 +392,7 @@ static struct builtin_term builtin_termcaps[] =
     {K_RIGHT,		"\033[C"},
 # endif
 
-# if defined(UNIX) || defined(ALL_BUILTIN_TCAPS) || defined(SOME_BUILTIN_TCAPS) || defined(__EMX__)
+# if defined(UNIX) || defined(ALL_BUILTIN_TCAPS) || defined(SOME_BUILTIN_TCAPS)
 /*
  * standard ANSI terminal, default for unix
  */
@@ -431,20 +428,16 @@ static struct builtin_term builtin_termcaps[] =
 #  endif
 # endif
 
-# if defined(ALL_BUILTIN_TCAPS) || defined(__EMX__)
+# if defined(ALL_BUILTIN_TCAPS)
 /*
  * These codes are valid when nansi.sys or equivalent has been installed.
  * Function keys on a PC are preceded with a NUL. These are converted into
  * K_NUL '\316' in mch_inchar(), because we cannot handle NULs in key codes.
  * CTRL-arrow is used instead of SHIFT-arrow.
  */
-#ifdef __EMX__
-    {(int)KS_NAME,	"os2ansi"},
-#else
     {(int)KS_NAME,	"pcansi"},
     {(int)KS_DL,	"\033[M"},
     {(int)KS_AL,	"\033[L"},
-#endif
     {(int)KS_CE,	"\033[K"},
     {(int)KS_CL,	"\033[2J"},
     {(int)KS_ME,	"\033[0m"},
@@ -516,7 +509,7 @@ static struct builtin_term builtin_termcaps[] =
     {K_PAGEUP,		"\316I"},
 # endif
 
-# if defined(WIN3264) || defined(ALL_BUILTIN_TCAPS) || defined(__EMX__)
+# if defined(WIN3264) || defined(ALL_BUILTIN_TCAPS)
 /*
  * These codes are valid for the Win32 Console .  The entries that start with
  * ESC | are translated into console calls in os_win32.c.  The function keys
@@ -793,7 +786,7 @@ static struct builtin_term builtin_termcaps[] =
 #  endif
 # endif
 
-# if defined(UNIX) || defined(ALL_BUILTIN_TCAPS) || defined(SOME_BUILTIN_TCAPS) || defined(__EMX__)
+# if defined(UNIX) || defined(ALL_BUILTIN_TCAPS) || defined(SOME_BUILTIN_TCAPS)
     {(int)KS_NAME,	"xterm"},
     {(int)KS_CE,	IF_EB("\033[K", ESC_STR "[K")},
     {(int)KS_AL,	IF_EB("\033[L", ESC_STR "[L")},
@@ -852,9 +845,11 @@ static struct builtin_term builtin_termcaps[] =
 						  ESC_STR "[8;%p1%d;%p2%dt")},
     {(int)KS_CWP,	IF_EB("\033[3;%p1%d;%p2%dt",
 						  ESC_STR "[3;%p1%d;%p2%dt")},
+    {(int)KS_CGP,	IF_EB("\033[13t", ESC_STR "[13t")},
 #  else
     {(int)KS_CWS,	IF_EB("\033[8;%d;%dt", ESC_STR "[8;%d;%dt")},
     {(int)KS_CWP,	IF_EB("\033[3;%d;%dt", ESC_STR "[3;%d;%dt")},
+    {(int)KS_CGP,	IF_EB("\033[13t", ESC_STR "[13t")},
 #  endif
     {(int)KS_CRV,	IF_EB("\033[>c", ESC_STR "[>c")},
     {(int)KS_RBG,	IF_EB("\033]11;?\007", ESC_STR "]11;?\007")},
@@ -864,6 +859,8 @@ static struct builtin_term builtin_termcaps[] =
     {(int)KS_8F,	IF_EB("\033[38;2;%lu;%lu;%lum", ESC_STR "[38;2;%lu;%lu;%lum")},
     {(int)KS_8B,	IF_EB("\033[48;2;%lu;%lu;%lum", ESC_STR "[48;2;%lu;%lu;%lum")},
 #  endif
+    {(int)KS_CBE,	IF_EB("\033[?2004h", ESC_STR "[?2004h")},
+    {(int)KS_CBD,	IF_EB("\033[?2004l", ESC_STR "[?2004l")},
 
     {K_UP,		IF_EB("\033O*A", ESC_STR "O*A")},
     {K_DOWN,		IF_EB("\033O*B", ESC_STR "O*B")},
@@ -909,13 +906,15 @@ static struct builtin_term builtin_termcaps[] =
     {K_ZEND,		IF_EB("\033[8;*~", ESC_STR "[8;*~")},
     {K_PAGEUP,		IF_EB("\033[5;*~", ESC_STR "[5;*~")},
     {K_PAGEDOWN,	IF_EB("\033[6;*~", ESC_STR "[6;*~")},
-    {K_KPLUS,		IF_EB("\033O*k", ESC_STR "O*k")},	/* keypad plus */
-    {K_KMINUS,		IF_EB("\033O*m", ESC_STR "O*m")},	/* keypad minus */
-    {K_KDIVIDE,		IF_EB("\033O*o", ESC_STR "O*o")},	/* keypad / */
-    {K_KMULTIPLY,	IF_EB("\033O*j", ESC_STR "O*j")},	/* keypad * */
-    {K_KENTER,		IF_EB("\033O*M", ESC_STR "O*M")},	/* keypad Enter */
-    {K_KPOINT,		IF_EB("\033O*n", ESC_STR "O*n")},	/* keypad . */
-    {K_KDEL,		IF_EB("\033[3;*~", ESC_STR "[3;*~")},	/* keypad Del */
+    {K_KPLUS,		IF_EB("\033O*k", ESC_STR "O*k")},     /* keypad plus */
+    {K_KMINUS,		IF_EB("\033O*m", ESC_STR "O*m")},     /* keypad minus */
+    {K_KDIVIDE,		IF_EB("\033O*o", ESC_STR "O*o")},     /* keypad / */
+    {K_KMULTIPLY,	IF_EB("\033O*j", ESC_STR "O*j")},     /* keypad * */
+    {K_KENTER,		IF_EB("\033O*M", ESC_STR "O*M")},     /* keypad Enter */
+    {K_KPOINT,		IF_EB("\033O*n", ESC_STR "O*n")},     /* keypad . */
+    {K_KDEL,		IF_EB("\033[3;*~", ESC_STR "[3;*~")}, /* keypad Del */
+    {K_PS,		IF_EB("\033[200~", ESC_STR "[200~")}, /* paste start */
+    {K_PE,		IF_EB("\033[201~", ESC_STR "[201~")}, /* paste end */
 
     {BT_EXTRA_KEYS,   ""},
     {TERMCAP2KEY('k', '0'), IF_EB("\033[10;*~", ESC_STR "[10;*~")}, /* F0 */
@@ -1231,6 +1230,8 @@ static struct builtin_term builtin_termcaps[] =
     {K_KMULTIPLY,	"[KMULTIPLY]"},
     {K_KENTER,		"[KENTER]"},
     {K_KPOINT,		"[KPOINT]"},
+    {K_PS,		"[PASTE-START]"},
+    {K_PE,		"[PASTE-END]"},
     {K_K0,		"[K0]"},
     {K_K1,		"[K1]"},
     {K_K2,		"[K2]"},
@@ -1286,10 +1287,10 @@ termgui_get_color(char_u *name)
     return t;
 }
 
-    long_u
+    guicolor_T
 termgui_mch_get_rgb(guicolor_T color)
 {
-    return (long_u)color;
+    return color;
 }
 #endif
 
@@ -1310,10 +1311,6 @@ termgui_mch_get_rgb(guicolor_T color)
 
 #ifdef __MINT__
 # define DEFAULT_TERM	(char_u *)"vt52"
-#endif
-
-#ifdef __EMX__
-# define DEFAULT_TERM	(char_u *)"os2ansi"
 #endif
 
 #ifdef VMS
@@ -1549,6 +1546,8 @@ set_termname(char_u *term)
 				{KS_CSI, "SI"}, {KS_CEI, "EI"},
 				{KS_U7, "u7"}, {KS_RBG, "RB"},
 				{KS_8F, "8f"}, {KS_8B, "8b"},
+				{KS_CBE, "BE"}, {KS_CBD, "BD"},
+				{KS_CPS, "PS"}, {KS_CPE, "PE"},
 				{(enum SpecialKey)0, NULL}
 			    };
 
@@ -1568,9 +1567,9 @@ set_termname(char_u *term)
 	    /* get output strings */
 		for (i = 0; string_names[i].name != NULL; ++i)
 		{
-		    if (term_str(string_names[i].dest) == NULL
-			    || term_str(string_names[i].dest) == empty_option)
-			term_str(string_names[i].dest) =
+		    if (TERM_STR(string_names[i].dest) == NULL
+			    || TERM_STR(string_names[i].dest) == empty_option)
+			TERM_STR(string_names[i].dest) =
 					   TGETSTR(string_names[i].name, &tp);
 		}
 
@@ -1622,8 +1621,8 @@ set_termname(char_u *term)
 		/*
 		 * Get number of colors (if not done already).
 		 */
-		if (term_str(KS_CCO) == NULL
-			|| term_str(KS_CCO) == empty_option)
+		if (TERM_STR(KS_CCO) == NULL
+			|| TERM_STR(KS_CCO) == empty_option)
 		    set_color_count(tgetnum("Co"));
 
 # ifndef hpux
@@ -1708,7 +1707,8 @@ set_termname(char_u *term)
 		{
 		    screen_start();	/* don't know where cursor is now */
 		    out_flush();
-		    ui_delay(2000L, TRUE);
+		    if (!is_not_a_term())
+			ui_delay(2000L, TRUE);
 		}
 		set_string_option_direct((char_u *)"term", -1, term,
 								 OPT_FREE, 0);
@@ -1908,21 +1908,21 @@ set_termname(char_u *term)
 
 #ifdef FEAT_AUTOCMD
 	{
-	    buf_T	*old_curbuf;
+	    bufref_T	old_curbuf;
 
 	    /*
 	     * Execute the TermChanged autocommands for each buffer that is
 	     * loaded.
 	     */
-	    old_curbuf = curbuf;
-	    for (curbuf = firstbuf; curbuf != NULL; curbuf = curbuf->b_next)
+	    set_bufref(&old_curbuf, curbuf);
+	    FOR_ALL_BUFFERS(curbuf)
 	    {
 		if (curbuf->b_ml.ml_mfp != NULL)
 		    apply_autocmds(EVENT_TERMCHANGED, NULL, NULL, FALSE,
 								      curbuf);
 	    }
-	    if (buf_valid(old_curbuf))
-		curbuf = old_curbuf;
+	    if (bufref_valid(&old_curbuf))
+		curbuf = old_curbuf.br_buf;
 	}
 #endif
     }
@@ -2094,7 +2094,7 @@ vim_tgetstr(char *s, char_u **pp)
 }
 #endif /* HAVE_TGETENT */
 
-#if defined(HAVE_TGETENT) && (defined(UNIX) || defined(__EMX__) || defined(VMS) || defined(MACOS_X))
+#if defined(HAVE_TGETENT) && (defined(UNIX) || defined(VMS) || defined(MACOS_X))
 /*
  * Get Columns and Rows from the termcap. Used after a window signal if the
  * ioctl() fails. It doesn't make sense to call tgetent each time if the "co"
@@ -2398,11 +2398,7 @@ termcapinit(char_u *name)
 /*
  * the number of calls to ui_write is reduced by using the buffer "out_buf"
  */
-#ifdef DOS16
-# define OUT_SIZE	255		/* only have 640K total... */
-#else
-# define OUT_SIZE	2047
-#endif
+#define OUT_SIZE	2047
 	    /* Add one to allow mch_write() in os_win32.c to append a NUL */
 static char_u		out_buf[OUT_SIZE + 1];
 static int		out_pos = 0;	/* number of chars in out_buf */
@@ -2587,6 +2583,60 @@ term_set_winpos(int x, int y)
     OUT_STR(tgoto((char *)T_CWP, y, x));
 }
 
+# if defined(FEAT_TERMRESPONSE) || defined(PROTO)
+/*
+ * Return TRUE if we can request the terminal for a response.
+ */
+    static int
+can_get_termresponse()
+{
+    return cur_tmode == TMODE_RAW
+	    && termcap_active
+# ifdef UNIX
+	    && (is_not_a_term() || (isatty(1) && isatty(read_cmd_fd)))
+# endif
+	    && p_ek;
+}
+
+static int winpos_x;
+static int winpos_y;
+static int waiting_for_winpos = FALSE;
+
+/*
+ * Try getting the Vim window position from the terminal.
+ * Returns OK or FAIL.
+ */
+    int
+term_get_winpos(int *x, int *y)
+{
+    int count = 0;
+
+    if (*T_CGP == NUL || !can_get_termresponse())
+	return FAIL;
+    winpos_x = -1;
+    winpos_y = -1;
+    waiting_for_winpos = TRUE;
+    OUT_STR(T_CGP);
+    out_flush();
+
+    /* Try reading the result for 100 msec. */
+    while (count++ < 10)
+    {
+	(void)vpeekc_nomap();
+	if (winpos_x >= 0 && winpos_y >= 0)
+	{
+	    *x = winpos_x;
+	    *y = winpos_y;
+	    waiting_for_winpos = FALSE;
+	    return OK;
+	}
+	ui_delay(10, FALSE);
+    }
+    waiting_for_winpos = FALSE;
+    return FALSE;
+}
+# endif
+
     void
 term_set_winsize(int width, int height)
 {
@@ -2646,24 +2696,13 @@ term_color(char_u *s, int n)
 }
 
 #if defined(FEAT_TERMGUICOLORS) || defined(PROTO)
-    void
-term_fg_rgb_color(long_u rgb)
-{
-    term_rgb_color(T_8F, rgb);
-}
 
-    void
-term_bg_rgb_color(long_u rgb)
-{
-    term_rgb_color(T_8B, rgb);
-}
-
-#define RED(rgb)   ((rgb>>16)&0xFF)
-#define GREEN(rgb) ((rgb>> 8)&0xFF)
-#define BLUE(rgb)  ((rgb    )&0xFF)
+#define RED(rgb)   (((long_u)(rgb) >> 16) & 0xFF)
+#define GREEN(rgb) (((long_u)(rgb) >>  8) & 0xFF)
+#define BLUE(rgb)  (((long_u)(rgb)      ) & 0xFF)
 
     static void
-term_rgb_color(char_u *s, long_u rgb)
+term_rgb_color(char_u *s, guicolor_T rgb)
 {
 #define MAX_COLOR_STR_LEN 100
     char	buf[MAX_COLOR_STR_LEN];
@@ -2671,6 +2710,18 @@ term_rgb_color(char_u *s, long_u rgb)
     vim_snprintf(buf, MAX_COLOR_STR_LEN,
 				  (char *)s, RED(rgb), GREEN(rgb), BLUE(rgb));
     OUT_STR(buf);
+}
+
+    void
+term_fg_rgb_color(guicolor_T rgb)
+{
+    term_rgb_color(T_8F, rgb);
+}
+
+    void
+term_bg_rgb_color(guicolor_T rgb)
+{
+    term_rgb_color(T_8B, rgb);
 }
 #endif
 
@@ -3154,6 +3205,7 @@ starttermcap(void)
     {
 	out_str(T_TI);			/* start termcap mode */
 	out_str(T_KS);			/* start "keypad transmit" mode */
+	out_str(T_BE);			/* enable bracketed paste mode */
 	out_flush();
 	termcap_active = TRUE;
 	screen_start();			/* don't know where cursor is now */
@@ -3203,6 +3255,7 @@ stoptermcap(void)
 	    check_for_codes_from_term();
 	}
 #endif
+	out_str(T_BD);			/* disable bracketed paste mode */
 	out_str(T_KE);			/* stop "keypad transmit" mode */
 	out_flush();
 	termcap_active = FALSE;
@@ -3232,14 +3285,8 @@ stoptermcap(void)
 may_req_termresponse(void)
 {
     if (crv_status == CRV_GET
-	    && cur_tmode == TMODE_RAW
+	    && can_get_termresponse()
 	    && starting == 0
-	    && termcap_active
-	    && p_ek
-# ifdef UNIX
-	    && isatty(1)
-	    && isatty(read_cmd_fd)
-# endif
 	    && *T_CRV != NUL)
     {
 	LOG_TR("Sending CRV");
@@ -3266,13 +3313,8 @@ may_req_termresponse(void)
 may_req_ambiguous_char_width(void)
 {
     if (u7_status == U7_GET
-	    && cur_tmode == TMODE_RAW
-	    && termcap_active
-	    && p_ek
-#  ifdef UNIX
-	    && isatty(1)
-	    && isatty(read_cmd_fd)
-#  endif
+	    && can_get_termresponse()
+	    && starting == 0
 	    && *T_U7 != NUL
 	    && !option_was_set((char_u *)"ambiwidth"))
     {
@@ -3298,7 +3340,6 @@ may_req_ambiguous_char_width(void)
 }
 # endif
 
-#if defined(FEAT_TERMRESPONSE) || defined(PROTO)
 /*
  * Similar to requesting the version string: Request the terminal background
  * color when it is the right moment.
@@ -3307,13 +3348,8 @@ may_req_ambiguous_char_width(void)
 may_req_bg_color(void)
 {
     if (rbg_status == RBG_GET
-	    && cur_tmode == TMODE_RAW
-	    && termcap_active
-	    && p_ek
-#  ifdef UNIX
-	    && isatty(1)
-	    && isatty(read_cmd_fd)
-#  endif
+	    && can_get_termresponse()
+	    && starting == 0
 	    && *T_RBG != NUL
 	    && !option_was_set((char_u *)"bg"))
     {
@@ -3326,7 +3362,6 @@ may_req_bg_color(void)
 	(void)vpeekc_nomap();
     }
 }
-# endif
 
 # ifdef DEBUG_TERMRESPONSE
     static void
@@ -4139,10 +4174,12 @@ check_termcode(
 	     * - Cursor position report: <Esc>[{row};{col}R
 	     *   The final byte must be 'R'. It is used for checking the
 	     *   ambiguous-width character state.
+	     *
+	     * - window position reply: <Esc>[3;{x};{y}t
 	     */
 	    char_u *argp = tp[0] == ESC ? tp + 2 : tp + 1;
 
-	    if ((*T_CRV != NUL || *T_U7 != NUL)
+	    if ((*T_CRV != NUL || *T_U7 != NUL || waiting_for_winpos)
 			&& ((tp[0] == ESC && len >= 3 && tp[1] == '[')
 			    || (tp[0] == CSI && len >= 2))
 			&& (VIM_ISDIGIT(*argp) || *argp == '>' || *argp == '?'))
@@ -4280,6 +4317,41 @@ check_termcode(
 		    key_name[0] = (int)KS_EXTRA;
 		    key_name[1] = (int)KE_IGNORE;
 		    slen = i + 1;
+		}
+
+		/*
+		 * Check for a window position response from the terminal:
+		 *       {lead}3;{x}:{y}t
+		 */
+		else if (waiting_for_winpos
+			    && ((len >= 4 && tp[0] == ESC && tp[1] == '[')
+				|| (len >= 3 && tp[0] == CSI))
+			    && tp[(j = 1 + (tp[0] == ESC))] == '3'
+			    && tp[j + 1] == ';')
+		{
+		    j += 2;
+		    for (i = j; i < len && vim_isdigit(tp[i]); ++i)
+			;
+		    if (i < len && tp[i] == ';')
+		    {
+			winpos_x = atoi((char *)tp + j);
+			j = i + 1;
+			for (i = j; i < len && vim_isdigit(tp[i]); ++i)
+			    ;
+			if (i < len && tp[i] == 't')
+			{
+			    winpos_y = atoi((char *)tp + j);
+			    /* got finished code: consume it */
+			    key_name[0] = (int)KS_EXTRA;
+			    key_name[1] = (int)KE_IGNORE;
+			    slen = i + 1;
+			}
+		    }
+		    if (i == len)
+		    {
+			LOG_TR("not enough characters for winpos");
+			return -1;
+		    }
 		}
 	    }
 
@@ -4951,7 +5023,7 @@ check_termcode(
 		button = getdigits(&p);
 		mouse_code = 0;
 
-		switch( button )
+		switch (button)
 		{
 		    case 4: mouse_code = MOUSE_LEFT; break;
 		    case 1: mouse_code = MOUSE_RIGHT; break;
@@ -4959,7 +5031,7 @@ check_termcode(
 		    default: return -1;
 		}
 
-		switch( action )
+		switch (action)
 		{
 		    case 31: /* Initial press */
 			if (*p++ != ';')
@@ -5031,12 +5103,25 @@ check_termcode(
 		     * Compute the time elapsed since the previous mouse click.
 		     */
 		    gettimeofday(&mouse_time, NULL);
-		    timediff = (mouse_time.tv_usec
-					    - orig_mouse_time.tv_usec) / 1000;
-		    if (timediff < 0)
-			--orig_mouse_time.tv_sec;
-		    timediff += (mouse_time.tv_sec
-					     - orig_mouse_time.tv_sec) * 1000;
+		    if (orig_mouse_time.tv_sec == 0)
+		    {
+			/*
+			 * Avoid computing the difference between mouse_time
+			 * and orig_mouse_time for the first click, as the
+			 * difference would be huge and would cause multiplication
+			 * overflow.
+			 */
+			timediff = p_mouset;
+		    }
+		    else
+		    {
+			timediff = (mouse_time.tv_usec
+						- orig_mouse_time.tv_usec) / 1000;
+			if (timediff < 0)
+			    --orig_mouse_time.tv_sec;
+			timediff += (mouse_time.tv_sec
+						 - orig_mouse_time.tv_sec) * 1000;
+		    }
 		    orig_mouse_time = mouse_time;
 		    if (mouse_code == orig_mouse_code
 			    && timediff < p_mouset
@@ -5095,9 +5180,11 @@ check_termcode(
 	    else if (orig_num_clicks == 4)
 		modifiers |= MOD_MASK_4CLICK;
 
-	    /* Work out our pseudo mouse event */
+	    /* Work out our pseudo mouse event. Note that MOUSE_RELEASE gets
+	     * added, then it's not mouse up/down. */
 	    key_name[0] = (int)KS_EXTRA;
-	    if (wheel_code != 0)
+            if (wheel_code != 0
+			      && (wheel_code & MOUSE_RELEASE) != MOUSE_RELEASE)
 	    {
 		if (wheel_code & MOUSE_CTRL)
 		    modifiers |= MOD_MASK_CTRL;
@@ -5428,7 +5515,7 @@ replace_termcodes(
 	    }
 #endif
 
-	    slen = trans_special(&src, result + dlen, TRUE);
+	    slen = trans_special(&src, result + dlen, TRUE, FALSE);
 	    if (slen)
 	    {
 		dlen += slen;
@@ -6068,8 +6155,12 @@ hex_digit(int c)
     guicolor_T
 gui_get_color_cmn(char_u *name)
 {
-    /* On MS-Windows an RGB macro is available and it's different from ours,
-     * but does what is needed. */
+    /* On MS-Windows an RGB macro is available and it produces 0x00bbggrr color
+     * values as used by the MS-Windows GDI api.  It should be used only for
+     * MS-Windows GDI builds. */
+# if defined(RGB) && defined(WIN32) && !defined(FEAT_GUI)
+#  undef RGB
+# endif
 # ifndef RGB
 #  define RGB(r, g, b)	((r<<16) | (g<<8) | (b))
 # endif
@@ -6085,6 +6176,8 @@ gui_get_color_cmn(char_u *name)
 	guicolor_T  color;
     };
 
+    /* Only non X11 colors (not present in rgb.txt) and colors in
+     * color_names[], useful when $VIMRUNTIME is not found,. */
     static struct rgbcolor_table_S rgb_table[] = {
 	    {(char_u *)"black",		RGB(0x00, 0x00, 0x00)},
 	    {(char_u *)"blue",		RGB(0x00, 0x00, 0xFF)},
@@ -6099,25 +6192,9 @@ gui_get_color_cmn(char_u *name)
 	    {(char_u *)"darkred",	RGB(0x8B, 0x00, 0x00)},
 	    {(char_u *)"darkyellow",	RGB(0x8B, 0x8B, 0x00)}, /* No X11 */
 	    {(char_u *)"gray",		RGB(0xBE, 0xBE, 0xBE)},
-	    {(char_u *)"gray10",	RGB(0x1A, 0x1A, 0x1A)},
-	    {(char_u *)"gray20",	RGB(0x33, 0x33, 0x33)},
-	    {(char_u *)"gray30",	RGB(0x4D, 0x4D, 0x4D)},
-	    {(char_u *)"gray40",	RGB(0x66, 0x66, 0x66)},
-	    {(char_u *)"gray50",	RGB(0x7F, 0x7F, 0x7F)},
-	    {(char_u *)"gray60",	RGB(0x99, 0x99, 0x99)},
-	    {(char_u *)"gray70",	RGB(0xB3, 0xB3, 0xB3)},
-	    {(char_u *)"gray80",	RGB(0xCC, 0xCC, 0xCC)},
-	    {(char_u *)"gray90",	RGB(0xE5, 0xE5, 0xE5)},
 	    {(char_u *)"green",		RGB(0x00, 0xFF, 0x00)},
 	    {(char_u *)"grey",		RGB(0xBE, 0xBE, 0xBE)},
-	    {(char_u *)"grey10",	RGB(0x1A, 0x1A, 0x1A)},
-	    {(char_u *)"grey20",	RGB(0x33, 0x33, 0x33)},
-	    {(char_u *)"grey30",	RGB(0x4D, 0x4D, 0x4D)},
 	    {(char_u *)"grey40",	RGB(0x66, 0x66, 0x66)},
-	    {(char_u *)"grey50",	RGB(0x7F, 0x7F, 0x7F)},
-	    {(char_u *)"grey60",	RGB(0x99, 0x99, 0x99)},
-	    {(char_u *)"grey70",	RGB(0xB3, 0xB3, 0xB3)},
-	    {(char_u *)"grey80",	RGB(0xCC, 0xCC, 0xCC)},
 	    {(char_u *)"grey90",	RGB(0xE5, 0xE5, 0xE5)},
 	    {(char_u *)"lightblue",	RGB(0xAD, 0xD8, 0xE6)},
 	    {(char_u *)"lightcyan",	RGB(0xE0, 0xFF, 0xFF)},
@@ -6128,16 +6205,14 @@ gui_get_color_cmn(char_u *name)
 	    {(char_u *)"lightred",	RGB(0xFF, 0x8B, 0x8B)}, /* No X11 */
 	    {(char_u *)"lightyellow",	RGB(0xFF, 0xFF, 0xE0)},
 	    {(char_u *)"magenta",	RGB(0xFF, 0x00, 0xFF)},
-	    {(char_u *)"orange",	RGB(0xFF, 0xA5, 0x00)},
-	    {(char_u *)"purple",	RGB(0xA0, 0x20, 0xF0)},
 	    {(char_u *)"red",		RGB(0xFF, 0x00, 0x00)},
 	    {(char_u *)"seagreen",	RGB(0x2E, 0x8B, 0x57)},
-	    {(char_u *)"slateblue",	RGB(0x6A, 0x5A, 0xCD)},
-	    {(char_u *)"violet",	RGB(0xEE, 0x82, 0xEE)},
 	    {(char_u *)"white",		RGB(0xFF, 0xFF, 0xFF)},
 	    {(char_u *)"yellow",	RGB(0xFF, 0xFF, 0x00)},
     };
 
+    static struct rgbcolor_table_S *colornames_table;
+    static int size = 0;
 
     if (name[0] == '#' && STRLEN(name) == 7)
     {
@@ -6158,44 +6233,78 @@ gui_get_color_cmn(char_u *name)
     /*
      * Last attempt. Look in the file "$VIM/rgb.txt".
      */
-
-    fname = expand_env_save((char_u *)"$VIMRUNTIME/rgb.txt");
-    if (fname == NULL)
-	return INVALCOLOR;
-
-    fd = fopen((char *)fname, "rt");
-    vim_free(fname);
-    if (fd == NULL)
+    if (size == 0)
     {
-	if (p_verbose > 1)
-	    verb_msg((char_u *)_("Cannot open $VIMRUNTIME/rgb.txt"));
-	return INVALCOLOR;
-    }
+	int counting;
 
-    while (!feof(fd))
-    {
-	size_t		len;
-	int		pos;
+	/* colornames_table not yet initialized */
+	fname = expand_env_save((char_u *)"$VIMRUNTIME/rgb.txt");
+	if (fname == NULL)
+	    return INVALCOLOR;
 
-	ignoredp = fgets(line, LINE_LEN, fd);
-	len = strlen(line);
-
-	if (len <= 1 || line[len - 1] != '\n')
-	    continue;
-
-	line[len - 1] = '\0';
-
-	i = sscanf(line, "%d %d %d %n", &r, &g, &b, &pos);
-	if (i != 3)
-	    continue;
-
-	if (STRICMP(line + pos, name) == 0)
+	fd = fopen((char *)fname, "rt");
+	vim_free(fname);
+	if (fd == NULL)
 	{
-	    fclose(fd);
-	    return (guicolor_T)RGB(r, g, b);
+	    if (p_verbose > 1)
+		verb_msg((char_u *)_("Cannot open $VIMRUNTIME/rgb.txt"));
+	    return INVALCOLOR;
 	}
+
+	for (counting = 1; counting >= 0; --counting)
+	{
+	    if (!counting)
+	    {
+		colornames_table = (struct rgbcolor_table_S *)alloc(
+			   (unsigned)(sizeof(struct rgbcolor_table_S) * size));
+		if (colornames_table == NULL)
+		{
+		    fclose(fd);
+		    return INVALCOLOR;
+		}
+		rewind(fd);
+	    }
+	    size = 0;
+
+	    while (!feof(fd))
+	    {
+		size_t	len;
+		int	pos;
+
+		ignoredp = fgets(line, LINE_LEN, fd);
+		len = strlen(line);
+
+		if (len <= 1 || line[len - 1] != '\n')
+		    continue;
+
+		line[len - 1] = '\0';
+
+		i = sscanf(line, "%d %d %d %n", &r, &g, &b, &pos);
+		if (i != 3)
+		    continue;
+
+		if (!counting)
+		{
+		    char_u *s = vim_strsave((char_u *)line + pos);
+
+		    if (s == NULL)
+		    {
+			fclose(fd);
+			return INVALCOLOR;
+		    }
+		    colornames_table[size].color_name = s;
+		    colornames_table[size].color = (guicolor_T)RGB(r, g, b);
+		}
+		size++;
+	    }
+	}
+	fclose(fd);
     }
-    fclose(fd);
+
+    for (i = 0; i < size; i++)
+	if (STRICMP(name, colornames_table[i].color_name) == 0)
+	    return colornames_table[i].color;
+
     return INVALCOLOR;
 }
 #endif

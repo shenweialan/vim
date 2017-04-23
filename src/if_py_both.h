@@ -582,9 +582,9 @@ VimTryStart(void)
 VimTryEnd(void)
 {
     --trylevel;
-    /* Without this it stops processing all subsequent VimL commands and
-     * generates strange error messages if I e.g. try calling Test() in a
-     * cycle */
+    /* Without this it stops processing all subsequent Vim script commands and
+     * generates strange error messages if I e.g. try calling Test() in a cycle
+     */
     did_emsg = FALSE;
     /* Keyboard interrupt should be preferred over anything else */
     if (got_int)
@@ -625,7 +625,7 @@ VimTryEnd(void)
 	discard_current_exception();
 	return -1;
     }
-    /* Finally transform VimL exception to python one */
+    /* Finally transform Vim script exception to python one */
     else
     {
 	PyErr_SetVim((char *)current_exception->value);
@@ -2835,16 +2835,17 @@ typedef struct
     typval_T	*argv;
     dict_T	*self;
     pylinkedlist_T	ref;
+    int		auto_rebind;
 } FunctionObject;
 
 static PyTypeObject FunctionType;
 
-#define NEW_FUNCTION(name, argc, argv, self) \
-    FunctionNew(&FunctionType, name, argc, argv, self)
+#define NEW_FUNCTION(name, argc, argv, self, pt_auto) \
+    FunctionNew(&FunctionType, (name), (argc), (argv), (self), (pt_auto))
 
     static PyObject *
 FunctionNew(PyTypeObject *subtype, char_u *name, int argc, typval_T *argv,
-	dict_T *selfdict)
+	dict_T *selfdict, int auto_rebind)
 {
     FunctionObject	*self;
 
@@ -2862,7 +2863,6 @@ FunctionNew(PyTypeObject *subtype, char_u *name, int argc, typval_T *argv,
 	    return NULL;
 	}
 	self->name = vim_strsave(name);
-	func_ref(self->name);
     }
     else
 	if ((self->name = get_expanded_name(name,
@@ -2874,9 +2874,11 @@ FunctionNew(PyTypeObject *subtype, char_u *name, int argc, typval_T *argv,
 	    return NULL;
 	}
 
+    func_ref(self->name);
     self->argc = argc;
     self->argv = argv;
     self->self = selfdict;
+    self->auto_rebind = selfdict == NULL ? TRUE : auto_rebind;
 
     if (self->argv || self->self)
 	pyll_add((PyObject *)(self), &self->ref, &lastfunc);
@@ -2889,6 +2891,7 @@ FunctionConstructor(PyTypeObject *subtype, PyObject *args, PyObject *kwargs)
 {
     PyObject	*self;
     PyObject	*selfdictObject;
+    PyObject	*autoRebindObject;
     PyObject	*argsObject = NULL;
     char_u	*name;
     typval_T	selfdicttv;
@@ -2896,6 +2899,7 @@ FunctionConstructor(PyTypeObject *subtype, PyObject *args, PyObject *kwargs)
     list_T	*argslist = NULL;
     dict_T	*selfdict = NULL;
     int		argc = 0;
+    int		auto_rebind = TRUE;
     typval_T	*argv = NULL;
     typval_T	*curtv;
     listitem_T	*li;
@@ -2936,6 +2940,21 @@ FunctionConstructor(PyTypeObject *subtype, PyObject *args, PyObject *kwargs)
 	    }
 	    list_unref(argslist);
 	}
+	if (selfdict != NULL)
+	{
+	    auto_rebind = FALSE;
+	    autoRebindObject = PyDict_GetItemString(kwargs, "auto_rebind");
+	    if (autoRebindObject != NULL)
+	    {
+		auto_rebind = PyObject_IsTrue(autoRebindObject);
+		if (auto_rebind == -1)
+		{
+		    dict_unref(selfdict);
+		    list_unref(argslist);
+		    return NULL;
+		}
+	    }
+	}
     }
 
     if (!PyArg_ParseTuple(args, "et", "ascii", &name))
@@ -2947,7 +2966,7 @@ FunctionConstructor(PyTypeObject *subtype, PyObject *args, PyObject *kwargs)
 	return NULL;
     }
 
-    self = FunctionNew(subtype, name, argc, argv, selfdict);
+    self = FunctionNew(subtype, name, argc, argv, selfdict, auto_rebind);
 
     PyMem_Free(name);
 
@@ -2971,7 +2990,7 @@ FunctionDestructor(FunctionObject *self)
 }
 
 static char *FunctionAttrs[] = {
-    "softspace", "args", "self",
+    "softspace", "args", "self", "auto_rebind",
     NULL
 };
 
@@ -2990,9 +3009,9 @@ FunctionAttr(FunctionObject *self, char *name)
 	return PyString_FromString((char *)(self->name));
     else if (strcmp(name, "args") == 0)
     {
-	if (self->argv == NULL)
+	if (self->argv == NULL || (list = list_alloc()) == NULL)
 	    return AlwaysNone(NULL);
-	list = list_alloc();
+
 	for (i = 0; i < self->argc; ++i)
 	    list_append_tv(list, &self->argv[i]);
 	return NEW_LIST(list);
@@ -3001,6 +3020,10 @@ FunctionAttr(FunctionObject *self, char *name)
 	return self->self == NULL
 	    ? AlwaysNone(NULL)
 	    : NEW_DICTIONARY(self->self);
+    else if (strcmp(name, "auto_rebind") == 0)
+	return self->auto_rebind
+	    ? AlwaysTrue(NULL)
+	    : AlwaysFalse(NULL);
     else if (strcmp(name, "__members__") == 0)
 	return ObjectDir(NULL, FunctionAttrs);
     return NULL;
@@ -3035,6 +3058,7 @@ set_partial(FunctionObject *self, partial_T *pt, int exported)
 	pt->pt_argc = 0;
 	pt->pt_argv = NULL;
     }
+    pt->pt_auto = self->auto_rebind || !exported;
     pt->pt_dict = self->self;
     if (exported && self->self)
 	++pt->pt_dict->dv_refcount;
@@ -3076,6 +3100,7 @@ FunctionCall(FunctionObject *self, PyObject *argsObject, PyObject *kwargs)
 
     if (self->argv || self->self)
     {
+	vim_memset(&pt, 0, sizeof(partial_T));
 	set_partial(self, &pt, FALSE);
 	pt_ptr = &pt;
     }
@@ -3148,6 +3173,8 @@ FunctionRepr(FunctionObject *self)
 	ga_concat(&repr_ga, tv2string(&tv, &tofree, numbuf, get_copyID()));
 	--emsg_silent;
 	vim_free(tofree);
+	if (self->auto_rebind)
+	    ga_concat(&repr_ga, (char_u *)", auto_rebind=True");
     }
     ga_append(&repr_ga, '>');
     ret = PyString_FromString((char *)repr_ga.ga_data);
@@ -3382,7 +3409,7 @@ set_option_value_for(
 {
     win_T	*save_curwin = NULL;
     tabpage_T	*save_curtab = NULL;
-    buf_T	*save_curbuf = NULL;
+    bufref_T	save_curbuf;
     int		set_ret = 0;
 
     VimTryStart();
@@ -3404,7 +3431,7 @@ set_option_value_for(
 	case SREQ_BUF:
 	    switch_buffer(&save_curbuf, (buf_T *)from);
 	    set_ret = set_option_value_err(key, numval, stringval, opt_flags);
-	    restore_buffer(save_curbuf);
+	    restore_buffer(&save_curbuf);
 	    break;
 	case SREQ_GLOBAL:
 	    set_ret = set_option_value_err(key, numval, stringval, opt_flags);
@@ -4246,17 +4273,17 @@ switch_to_win_for_buf(
     buf_T	*buf,
     win_T	**save_curwinp,
     tabpage_T	**save_curtabp,
-    buf_T	**save_curbufp)
+    bufref_T	*save_curbuf)
 {
     win_T	*wp;
     tabpage_T	*tp;
 
     if (find_win_for_buf(buf, &wp, &tp) == FAIL)
-	switch_buffer(save_curbufp, buf);
+	switch_buffer(save_curbuf, buf);
     else if (switch_win(save_curwinp, save_curtabp, wp, tp, TRUE) == FAIL)
     {
 	restore_win(*save_curwinp, *save_curtabp, TRUE);
-	switch_buffer(save_curbufp, buf);
+	switch_buffer(save_curbuf, buf);
     }
 }
 
@@ -4264,9 +4291,9 @@ switch_to_win_for_buf(
 restore_win_for_buf(
     win_T	*save_curwin,
     tabpage_T	*save_curtab,
-    buf_T	*save_curbuf)
+    bufref_T	*save_curbuf)
 {
-    if (save_curbuf == NULL)
+    if (save_curbuf->br_buf == NULL)
 	restore_win(save_curwin, save_curtab, TRUE);
     else
 	restore_buffer(save_curbuf);
@@ -4284,7 +4311,7 @@ restore_win_for_buf(
     static int
 SetBufferLine(buf_T *buf, PyInt n, PyObject *line, PyInt *len_change)
 {
-    buf_T	*save_curbuf = NULL;
+    bufref_T	save_curbuf = {NULL, 0};
     win_T	*save_curwin = NULL;
     tabpage_T	*save_curtab = NULL;
 
@@ -4309,13 +4336,13 @@ SetBufferLine(buf_T *buf, PyInt n, PyObject *line, PyInt *len_change)
 	{
 	    if (buf == curbuf)
 		py_fix_cursor((linenr_T)n, (linenr_T)n + 1, (linenr_T)-1);
-	    if (save_curbuf == NULL)
+	    if (save_curbuf.br_buf == NULL)
 		/* Only adjust marks if we managed to switch to a window that
 		 * holds the buffer, otherwise line numbers will be invalid. */
 		deleted_lines_mark((linenr_T)n, 1L);
 	}
 
-	restore_win_for_buf(save_curwin, save_curtab, save_curbuf);
+	restore_win_for_buf(save_curwin, save_curtab, &save_curbuf);
 
 	if (VimTryEnd())
 	    return FAIL;
@@ -4351,7 +4378,7 @@ SetBufferLine(buf_T *buf, PyInt n, PyObject *line, PyInt *len_change)
 	else
 	    changed_bytes((linenr_T)n, 0);
 
-	restore_win_for_buf(save_curwin, save_curtab, save_curbuf);
+	restore_win_for_buf(save_curwin, save_curtab, &save_curbuf);
 
 	/* Check that the cursor is not beyond the end of the line now. */
 	if (buf == curbuf)
@@ -4388,7 +4415,7 @@ SetBufferLineList(
 	PyObject *list,
 	PyInt *len_change)
 {
-    buf_T	*save_curbuf = NULL;
+    bufref_T	save_curbuf = {NULL, 0};
     win_T	*save_curwin = NULL;
     tabpage_T	*save_curtab = NULL;
 
@@ -4419,17 +4446,18 @@ SetBufferLineList(
 		    break;
 		}
 	    }
-	    if (buf == curbuf && (save_curwin != NULL || save_curbuf == NULL))
+	    if (buf == curbuf && (save_curwin != NULL
+					       || save_curbuf.br_buf == NULL))
 		/* Using an existing window for the buffer, adjust the cursor
 		 * position. */
 		py_fix_cursor((linenr_T)lo, (linenr_T)hi, (linenr_T)-n);
-	    if (save_curbuf == NULL)
+	    if (save_curbuf.br_buf == NULL)
 		/* Only adjust marks if we managed to switch to a window that
 		 * holds the buffer, otherwise line numbers will be invalid. */
 		deleted_lines_mark((linenr_T)lo, (long)i);
 	}
 
-	restore_win_for_buf(save_curwin, save_curtab, save_curbuf);
+	restore_win_for_buf(save_curwin, save_curtab, &save_curbuf);
 
 	if (VimTryEnd())
 	    return FAIL;
@@ -4551,7 +4579,7 @@ SetBufferLineList(
 	 * changed range, and move any in the remainder of the buffer.
 	 * Only adjust marks if we managed to switch to a window that holds
 	 * the buffer, otherwise line numbers will be invalid. */
-	if (save_curbuf == NULL)
+	if (save_curbuf.br_buf == NULL)
 	    mark_adjust((linenr_T)lo, (linenr_T)(hi - 1),
 						  (long)MAXLNUM, (long)extra);
 	changed_lines((linenr_T)lo, 0, (linenr_T)hi, (long)extra);
@@ -4560,7 +4588,7 @@ SetBufferLineList(
 	    py_fix_cursor((linenr_T)lo, (linenr_T)hi, (linenr_T)extra);
 
 	/* END of region without "return". */
-	restore_win_for_buf(save_curwin, save_curtab, save_curbuf);
+	restore_win_for_buf(save_curwin, save_curtab, &save_curbuf);
 
 	if (VimTryEnd())
 	    return FAIL;
@@ -4588,7 +4616,7 @@ SetBufferLineList(
     static int
 InsertBufferLines(buf_T *buf, PyInt n, PyObject *lines, PyInt *len_change)
 {
-    buf_T	*save_curbuf = NULL;
+    bufref_T	save_curbuf = {NULL, 0};
     win_T	*save_curwin = NULL;
     tabpage_T	*save_curtab = NULL;
 
@@ -4610,13 +4638,13 @@ InsertBufferLines(buf_T *buf, PyInt n, PyObject *lines, PyInt *len_change)
 	    RAISE_UNDO_FAIL;
 	else if (ml_append((linenr_T)n, (char_u *)str, 0, FALSE) == FAIL)
 	    RAISE_INSERT_LINE_FAIL;
-	else if (save_curbuf == NULL)
+	else if (save_curbuf.br_buf == NULL)
 	    /* Only adjust marks if we managed to switch to a window that
 	     * holds the buffer, otherwise line numbers will be invalid. */
 	    appended_lines_mark((linenr_T)n, 1L);
 
 	vim_free(str);
-	restore_win_for_buf(save_curwin, save_curtab, save_curbuf);
+	restore_win_for_buf(save_curwin, save_curtab, &save_curbuf);
 	update_screen(VALID);
 
 	if (VimTryEnd())
@@ -4677,7 +4705,7 @@ InsertBufferLines(buf_T *buf, PyInt n, PyObject *lines, PyInt *len_change)
 		}
 		vim_free(array[i]);
 	    }
-	    if (i > 0 && save_curbuf == NULL)
+	    if (i > 0 && save_curbuf.br_buf == NULL)
 		/* Only adjust marks if we managed to switch to a window that
 		 * holds the buffer, otherwise line numbers will be invalid. */
 		appended_lines_mark((linenr_T)n, (long)i);
@@ -4686,7 +4714,7 @@ InsertBufferLines(buf_T *buf, PyInt n, PyObject *lines, PyInt *len_change)
 	/* Free the array of lines. All of its contents have now
 	 * been freed. */
 	PyMem_Free(array);
-	restore_win_for_buf(save_curwin, save_curtab, save_curbuf);
+	restore_win_for_buf(save_curwin, save_curtab, &save_curbuf);
 
 	update_screen(VALID);
 
@@ -5189,7 +5217,7 @@ BufferMark(BufferObject *self, PyObject *pmarkObject)
     pos_T	*posp;
     char_u	*pmark;
     char_u	mark;
-    buf_T	*savebuf;
+    bufref_T	savebuf;
     PyObject	*todecref;
 
     if (CheckBuffer(self))
@@ -5213,7 +5241,7 @@ BufferMark(BufferObject *self, PyObject *pmarkObject)
     VimTryStart();
     switch_buffer(&savebuf, self->buf);
     posp = getmark(mark, FALSE);
-    restore_buffer(savebuf);
+    restore_buffer(&savebuf);
     if (VimTryEnd())
 	return NULL;
 
@@ -5591,6 +5619,7 @@ run_do(const char *cmd, void *arg UNUSED
     int		status;
     PyObject	*pyfunc, *pymain;
     PyObject	*run_ret;
+    buf_T	*was_curbuf = curbuf;
 
     if (u_save((linenr_T)RangeStart - 1, (linenr_T)RangeEnd + 1) != OK)
     {
@@ -5643,7 +5672,9 @@ run_do(const char *cmd, void *arg UNUSED
 #ifdef PY_CAN_RECURSE
 	*pygilstate = PyGILState_Ensure();
 #endif
-	if (!(line = GetBufferLine(curbuf, lnum)))
+	/* Check the line number, the command my have deleted lines. */
+	if (lnum > curbuf->b_ml.ml_line_count
+		|| !(line = GetBufferLine(curbuf, lnum)))
 	    goto err;
 	if (!(linenr = PyInt_FromLong((long) lnum)))
 	{
@@ -5656,9 +5687,19 @@ run_do(const char *cmd, void *arg UNUSED
 	if (!ret)
 	    goto err;
 
+	/* Check that the command didn't switch to another buffer. */
+	if (curbuf != was_curbuf)
+	{
+	    Py_XDECREF(ret);
+	    goto err;
+	}
+
 	if (ret != Py_None)
 	    if (SetBufferLine(curbuf, lnum, ret, NULL) == FAIL)
+	    {
+		Py_XDECREF(ret);
 		goto err;
+	    }
 
 	Py_XDECREF(ret);
 	PythonIO_Flush();
@@ -6269,7 +6310,7 @@ ConvertToPyObject(typval_T *tv)
 	case VAR_FUNC:
 	    return NEW_FUNCTION(tv->vval.v_string == NULL
 					  ? (char_u *)"" : tv->vval.v_string,
-					  0, NULL, NULL);
+					  0, NULL, NULL, TRUE);
 	case VAR_PARTIAL:
 	    if (tv->vval.v_partial->pt_argc)
 	    {
@@ -6282,9 +6323,10 @@ ConvertToPyObject(typval_T *tv)
 	    if (tv->vval.v_partial->pt_dict != NULL)
 		tv->vval.v_partial->pt_dict->dv_refcount++;
 	    return NEW_FUNCTION(tv->vval.v_partial == NULL
-				? (char_u *)"" : tv->vval.v_partial->pt_name,
+			     ? (char_u *)"" : partial_name(tv->vval.v_partial),
 				tv->vval.v_partial->pt_argc, argv,
-				tv->vval.v_partial->pt_dict);
+				tv->vval.v_partial->pt_dict,
+				tv->vval.v_partial->pt_auto);
 	case VAR_UNKNOWN:
 	case VAR_CHANNEL:
 	case VAR_JOB:
@@ -6742,8 +6784,13 @@ populate_module(PyObject *m)
 	return -1;
     ADD_OBJECT(m, "os", other_module);
 
+#if PY_MAJOR_VERSION >= 3
     if (!(py_getcwd = PyObject_GetAttrString(other_module, "getcwd")))
 	return -1;
+#else
+    if (!(py_getcwd = PyObject_GetAttrString(other_module, "getcwdu")))
+	return -1;
+#endif
     ADD_OBJECT(m, "_getcwd", py_getcwd)
 
     if (!(py_chdir = PyObject_GetAttrString(other_module, "chdir")))

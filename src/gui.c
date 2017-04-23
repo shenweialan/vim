@@ -1,4 +1,4 @@
-/* vi:set ts=8 sts=4 sw=4:
+/* vi:set ts=8 sts=4 sw=4 noet:
  *
  * VIM - Vi IMproved		by Bram Moolenaar
  *				GUI/Motif support by Robert Webb
@@ -447,7 +447,7 @@ gui_init_check(void)
      * See gui_do_fork().
      * Use a simpler check if the GUI window can probably be opened.
      */
-    result = gui.dofork ? gui_mch_early_init_check() : gui_mch_init_check();
+    result = gui.dofork ? gui_mch_early_init_check(TRUE) : gui_mch_init_check();
 # else
     result = gui_mch_init_check();
 # endif
@@ -571,7 +571,7 @@ gui_init(void)
 	    {
 #ifdef UNIX
 		{
-		    struct stat s;
+		    stat_T s;
 
 		    /* if ".gvimrc" file is not owned by user, set 'secure'
 		     * mode */
@@ -630,7 +630,7 @@ gui_init(void)
      * where Vim was started. */
     emsg_on_display = FALSE;
     msg_scrolled = 0;
-    clear_sb_text();
+    clear_sb_text(TRUE);
     need_wait_return = FALSE;
     msg_didany = FALSE;
 
@@ -1459,6 +1459,8 @@ gui_resize_shell(int pixel_width, int pixel_height)
     }
 
 again:
+    new_pixel_width = 0;
+    new_pixel_height = 0;
     busy = TRUE;
 
     /* Flush pending output before redrawing */
@@ -1468,8 +1470,8 @@ again:
     gui.num_rows = (pixel_height - gui_get_base_height()) / gui.char_height;
 
     gui_position_components(pixel_width);
-
     gui_reset_scroll_region();
+
     /*
      * At the "more" and ":confirm" prompt there is no redraw, put the cursor
      * at the last line here (why does it have to be one row too low?).
@@ -1491,17 +1493,22 @@ again:
 
     busy = FALSE;
 
-    /*
-     * We could have been called again while redrawing the screen.
-     * Need to do it all again with the latest size then.
-     */
+    /* We may have been called again while redrawing the screen.
+     * Need to do it all again with the latest size then.  But only if the size
+     * actually changed. */
     if (new_pixel_height)
     {
-	pixel_width = new_pixel_width;
-	pixel_height = new_pixel_height;
-	new_pixel_width = 0;
-	new_pixel_height = 0;
-	goto again;
+	if (pixel_width == new_pixel_width && pixel_height == new_pixel_height)
+	{
+	    new_pixel_width = 0;
+	    new_pixel_height = 0;
+	}
+	else
+	{
+	    pixel_width = new_pixel_width;
+	    pixel_height = new_pixel_height;
+	    goto again;
+	}
     }
 }
 
@@ -1511,18 +1518,10 @@ again:
     void
 gui_may_resize_shell(void)
 {
-    int		h, w;
-
     if (new_pixel_height)
-    {
 	/* careful: gui_resize_shell() may postpone the resize again if we
 	 * were called indirectly by it */
-	w = new_pixel_width;
-	h = new_pixel_height;
-	new_pixel_width = 0;
-	new_pixel_height = 0;
-	gui_resize_shell(w, h);
-    }
+	gui_resize_shell(new_pixel_width, new_pixel_height);
 }
 
     int
@@ -1773,7 +1772,7 @@ gui_write(
 	if (s[0] == ESC && s[1] == '|')
 	{
 	    p = s + 2;
-	    if (VIM_ISDIGIT(*p))
+	    if (VIM_ISDIGIT(*p) || (*p == '-' && VIM_ISDIGIT(*(p + 1))))
 	    {
 		arg1 = getdigits(&p);
 		if (p > s + len)
@@ -1964,12 +1963,13 @@ gui_write(
  * gui_can_update_cursor() afterwards.
  */
     void
-gui_dont_update_cursor(void)
+gui_dont_update_cursor(int undraw)
 {
     if (gui.in_use)
     {
 	/* Undraw the cursor now, we probably can't do it after the change. */
-	gui_undraw_cursor();
+	if (undraw)
+	    gui_undraw_cursor();
 	can_update_cursor = FALSE;
     }
 }
@@ -4082,7 +4082,7 @@ gui_drag_scrollbar(scrollbar_T *sb, long value, int still_dragging)
     {
 	do_check_scrollbind(TRUE);
 	/* need to update the window right here */
-	for (wp = firstwin; wp != NULL; wp = wp->w_next)
+	FOR_ALL_WINDOWS(wp)
 	    if (wp->w_redr_type > 0)
 		updateWindow(wp);
 	setcursor();
@@ -4476,7 +4476,7 @@ gui_do_scroll(void)
 	pum_redraw();
 #endif
 
-    return (wp == curwin && !equalpos(curwin->w_cursor, old_cursor));
+    return (wp == curwin && !EQUAL_POS(curwin->w_cursor, old_cursor));
 }
 
 
@@ -4500,7 +4500,7 @@ scroll_line_len(linenr_T lnum)
 	for (;;)
 	{
 	    w = chartabsize(p, col);
-	    mb_ptr_adv(p);
+	    MB_PTR_ADV(p);
 	    if (*p == NUL)		/* don't count the last character */
 		break;
 	    col += w;
@@ -4740,7 +4740,7 @@ gui_get_color(char_u *name)
     int
 gui_get_lightness(guicolor_T pixel)
 {
-    long_u	rgb = gui_mch_get_rgb(pixel);
+    long_u	rgb = (long_u)gui_mch_get_rgb(pixel);
 
     return  (int)(  (((rgb >> 16) & 0xff) * 299)
 		   + (((rgb >> 8) & 0xff) * 587)
@@ -4967,7 +4967,7 @@ ex_gui(exarg_T *eap)
      */
     if (arg[0] == '-'
 	    && (arg[1] == 'f' || arg[1] == 'b')
-	    && (arg[2] == NUL || vim_iswhite(arg[2])))
+	    && (arg[2] == NUL || VIM_ISWHITE(arg[2])))
     {
 	gui.dofork = (arg[1] == 'b');
 	eap->arg = skipwhite(eap->arg + 2);
@@ -5118,7 +5118,7 @@ gui_update_screen(void)
 		curwin->w_p_cole > 0
 # endif
 		)
-		     && !equalpos(last_cursormoved, curwin->w_cursor))
+		     && !EQUAL_POS(last_cursormoved, curwin->w_cursor))
     {
 # ifdef FEAT_AUTOCMD
 	if (has_cursormoved())
@@ -5348,10 +5348,15 @@ gui_do_findrepl(
     }
     else
     {
-	/* Search for the next match. */
+	int searchflags = SEARCH_MSG + SEARCH_MARK;
+
+	/* Search for the next match.
+	 * Don't skip text under cursor for single replace. */
+	if (type == FRD_REPLACE)
+	    searchflags += SEARCH_START;
 	i = msg_scroll;
 	(void)do_search(NULL, down ? '/' : '?', ga.ga_data, 1L,
-					      SEARCH_MSG + SEARCH_MARK, NULL);
+							   searchflags, NULL);
 	msg_scroll = i;	    /* don't let an error message set msg_scroll */
     }
 

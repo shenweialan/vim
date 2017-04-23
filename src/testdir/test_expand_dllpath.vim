@@ -1,5 +1,3 @@
-scriptencoding utf-8
-
 func s:test_expand_dllpath(optname)
   let $TEST_EXPAND_DLLPATH = '/dllpath/lib' . substitute(a:optname, '\zedll$', '.', '')
   execute 'let dllpath_save = &' . a:optname
@@ -16,7 +14,7 @@ func s:test_expand_dllpath(optname)
 endfunc
 
 func s:generate_test_if_exists(optname)
-  if exists('&' . a:optname)
+  if exists('+' . a:optname)
     execute join([
           \ 'func Test_expand_' . a:optname . '()',
           \ '  call s:test_expand_dllpath("' . a:optname . '")',

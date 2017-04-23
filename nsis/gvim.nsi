@@ -188,6 +188,7 @@ Section "Vim executables and runtime files"
 	File /oname=install.exe ${VIMSRC}\installw32.exe
 	File /oname=uninstal.exe ${VIMSRC}\uninstalw32.exe
 	File ${VIMSRC}\vimrun.exe
+	File /oname=tee.exe ${VIMSRC}\teew32.exe
 	File /oname=xxd.exe ${VIMSRC}\xxdw32.exe
 	File ${VIMTOOLS}\diff.exe
 	File ${VIMRT}\vimtutor.bat
@@ -384,6 +385,7 @@ SectionEnd
 		File ${VIMRT}\libintl-8.dll
 		File ${VIMRT}\libiconv-2.dll
 		File /nonfatal ${VIMRT}\libwinpthread-1.dll
+		File /nonfatal ${VIMRT}\libgcc_s_sjlj-1.dll
 	SectionEnd
 !endif
 
