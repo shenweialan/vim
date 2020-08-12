@@ -1,6 +1,11 @@
 " Tests for tabpage
 
+source screendump.vim
+source check.vim
+
 function Test_tabpage()
+  CheckFeature quickfix
+
   bw!
   " Simple test for opening and closing a tab page
   tabnew
@@ -32,7 +37,7 @@ function Test_tabpage()
   tabnew
   tabfirst
   call settabvar(2, 'val_num', 100)
-  call settabvar(2, 'val_str', 'SetTabVar test')
+  eval 'SetTabVar test'->settabvar(2, 'val_str')
   call settabvar(2, 'val_list', ['red', 'blue', 'green'])
   "
   call assert_true(gettabvar(2, 'val_num') == 100 && gettabvar(2, 'val_str') == 'SetTabVar test' && gettabvar(2, 'val_list') == ['red', 'blue', 'green'])
@@ -41,40 +46,38 @@ function Test_tabpage()
   call assert_true(t:val_num == 100 && t:val_str == 'SetTabVar test'  && t:val_list == ['red', 'blue', 'green'])
   tabclose
 
-  if has('gui') || has('clientserver')
-    " Test for ":tab drop exist-file" to keep current window.
-    sp test1
-    tab drop test1
-    call assert_true(tabpagenr('$') == 1 && winnr('$') == 2 && winnr() == 1)
-    close
-    "
-    "
-    " Test for ":tab drop new-file" to keep current window of tabpage 1.
-    split
-    tab drop newfile
-    call assert_true(tabpagenr('$') == 2 && tabpagewinnr(1, '$') == 2 && tabpagewinnr(1) == 1)
-    tabclose
-    q
-    "
-    "
-    " Test for ":tab drop multi-opend-file" to keep current tabpage and window.
-    new test1
-    tabnew
-    new test1
-    tab drop test1
-    call assert_true(tabpagenr() == 2 && tabpagewinnr(2, '$') == 2 && tabpagewinnr(2) == 1)
-    tabclose
-    q
-    "
-    "
-    " Test for ":tab drop vertical-split-window" to jump test1 buffer
-    tabedit test1
-    vnew
-    tabfirst
-    tab drop test1
-    call assert_equal([2, 2, 2, 2], [tabpagenr('$'), tabpagenr(), tabpagewinnr(2, '$'), tabpagewinnr(2)])
-    1tabonly
-  endif
+  " Test for ":tab drop exist-file" to keep current window.
+  sp test1
+  tab drop test1
+  call assert_true(tabpagenr('$') == 1 && winnr('$') == 2 && winnr() == 1)
+  close
+  "
+  "
+  " Test for ":tab drop new-file" to keep current window of tabpage 1.
+  split
+  tab drop newfile
+  call assert_true(tabpagenr('$') == 2 && tabpagewinnr(1, '$') == 2 && tabpagewinnr(1) == 1)
+  tabclose
+  q
+  "
+  "
+  " Test for ":tab drop multi-opened-file" to keep current tabpage and window.
+  new test1
+  tabnew
+  new test1
+  tab drop test1
+  call assert_true(tabpagenr() == 2 && tabpagewinnr(2, '$') == 2 && tabpagewinnr(2) == 1)
+  tabclose
+  q
+  "
+  "
+  " Test for ":tab drop vertical-split-window" to jump test1 buffer
+  tabedit test1
+  vnew
+  tabfirst
+  tab drop test1
+  call assert_equal([2, 2, 2, 2], [tabpagenr('$'), tabpagenr(), tabpagewinnr(2, '$'), tabpagewinnr(2)])
+  1tabonly
   "
   "
   for i in range(9) | tabnew | endfor
@@ -106,23 +109,49 @@ function Test_tabpage()
   call assert_equal(4, tabpagenr())
   7tabmove 5
   call assert_equal(5, tabpagenr())
+  -tabmove
+  call assert_equal(4, tabpagenr())
+  +tabmove
+  call assert_equal(5, tabpagenr())
+  -2tabmove
+  call assert_equal(3, tabpagenr())
+  +3tabmove
+  call assert_equal(6, tabpagenr())
+
+  " The following are a no-op
+  norm! 2gt
+  call assert_equal(2, tabpagenr())
+  tabmove 2
+  call assert_equal(2, tabpagenr())
+  2tabmove
+  call assert_equal(2, tabpagenr())
+  tabmove 1
+  call assert_equal(2, tabpagenr())
+  1tabmove
+  call assert_equal(2, tabpagenr())
+
+  call assert_fails('let t = tabpagenr("@")', 'E15:')
+  call assert_equal(0, tabpagewinnr(-1))
   call assert_fails("99tabmove", 'E16:')
   call assert_fails("+99tabmove", 'E16:')
   call assert_fails("-99tabmove", 'E16:')
-  call assert_fails("tabmove foo", 'E474:')
-  call assert_fails("tabmove 99", 'E474:')
-  call assert_fails("tabmove +99", 'E474:')
-  call assert_fails("tabmove -99", 'E474:')
-  call assert_fails("tabmove -3+", 'E474:')
-  call assert_fails("tabmove $3", 'E474:')
+  call assert_fails("tabmove foo", 'E475:')
+  call assert_fails("tabmove 99", 'E475:')
+  call assert_fails("tabmove +99", 'E475:')
+  call assert_fails("tabmove -99", 'E475:')
+  call assert_fails("tabmove -3+", 'E475:')
+  call assert_fails("tabmove $3", 'E475:')
+  call assert_fails("%tabonly", 'E16:')
   1tabonly!
+  tabmove 1
+  call assert_equal(1, tabpagenr())
+  tabnew
+  call assert_fails("-2tabmove", 'E16:')
+  tabonly!
 endfunc
 
 " Test autocommands
 function Test_tabpage_with_autocmd()
-  if !has('autocmd')
-    return
-  endif
   command -nargs=1 -bar C :call add(s:li, '=== ' . <q-args> . ' ===')|<args>
   augroup TestTabpageGroup
     au!
@@ -165,7 +194,7 @@ function Test_tabpage_with_autocmd()
   let s:li = split(join(map(copy(winr), 'gettabwinvar('.tabn.', v:val, "a")')), '\s\+')
   call assert_equal(['a', 'a'], s:li)
   let s:li = []
-  C call map(copy(winr), 'settabwinvar('.tabn.', v:val, ''a'', v:val*2)')
+  C call map(copy(winr), '(v:val*2)->settabwinvar(' .. tabn .. ', v:val, ''a'')')
   let s:li = split(join(map(copy(winr), 'gettabwinvar('.tabn.', v:val, "a")')), '\s\+')
   call assert_equal(['2', '4'], s:li)
 
@@ -201,7 +230,37 @@ function Test_tabpage_with_autocmd()
   1tabonly!
 endfunction
 
+" Test autocommands on tab drop
+function Test_tabpage_with_autocmd_tab_drop()
+  augroup TestTabpageGroup
+    au!
+    autocmd TabEnter * call add(s:li, 'TabEnter')
+    autocmd WinEnter * call add(s:li, 'WinEnter')
+    autocmd BufEnter * call add(s:li, 'BufEnter')
+    autocmd TabLeave * call add(s:li, 'TabLeave')
+    autocmd WinLeave * call add(s:li, 'WinLeave')
+    autocmd BufLeave * call add(s:li, 'BufLeave')
+  augroup END
+
+  let s:li = []
+  tab drop test1
+  call assert_equal(['BufLeave', 'BufEnter'], s:li)
+
+  let s:li = []
+  tab drop test2 test3
+  call assert_equal([
+        \ 'TabLeave', 'TabEnter', 'TabLeave', 'TabEnter',
+        \ 'TabLeave', 'WinEnter', 'TabEnter', 'BufEnter',
+        \ 'TabLeave', 'WinEnter', 'TabEnter', 'BufEnter'], s:li)
+
+  autocmd! TestTabpageGroup
+  augroup! TestTabpageGroup
+  1tabonly!
+endfunction
+
 function Test_tabpage_with_tab_modifier()
+  CheckFeature quickfix
+
   for n in range(4)
     tabedit
   endfor
@@ -265,14 +324,14 @@ function Test_tabpage_with_tabnext()
   call Check_tab_count(4, 'tabnext -', 3)
   call Check_tab_count(4, 'tabnext -2', 2)
   call Check_tab_count(3, 'tabnext $', 5)
-  call assert_fails('tabnext 0', 'E474:')
-  call assert_fails('tabnext .', 'E474:')
-  call assert_fails('tabnext -+', 'E474:')
-  call assert_fails('tabnext +2-', 'E474:')
-  call assert_fails('tabnext $3', 'E474:')
-  call assert_fails('tabnext 99', 'E474:')
-  call assert_fails('tabnext +99', 'E474:')
-  call assert_fails('tabnext -99', 'E474:')
+  call assert_fails('tabnext 0', 'E475:')
+  call assert_fails('tabnext .', 'E475:')
+  call assert_fails('tabnext -+', 'E475:')
+  call assert_fails('tabnext +2-', 'E475:')
+  call assert_fails('tabnext $3', 'E475:')
+  call assert_fails('tabnext 99', 'E475:')
+  call assert_fails('tabnext +99', 'E475:')
+  call assert_fails('tabnext -99', 'E475:')
 
   1tabonly!
 endfunction
@@ -291,13 +350,13 @@ function Test_tabpage_with_tabprevious()
     call Check_tab_count(6, cmd . ' 3', 3)
     call Check_tab_count(6, cmd . ' 8', 4)
     for n in range(2)
-      for c in ['0', '.+3', '+', '+2' , '-', '-2' , '$', '+99', '-99']
+      for c in ['0', '.+3', '+', '+2', '-', '-2', '$', '+99', '-99']
         if n == 0 " pre count
           let entire_cmd = c . cmd
           let err_code = 'E16:'
         else
           let entire_cmd = cmd . ' ' . c
-          let err_code = 'E474:'
+          let err_code = 'E475:'
         endif
         call assert_fails(entire_cmd, err_code)
       endfor
@@ -317,6 +376,34 @@ function s:reconstruct_tabpage_for_test(nr)
       call setline(1, ['', '', '3'])
     endif
   endfor
+endfunc
+
+func Test_tabpage_ctrl_pgup_pgdown()
+  enew!
+  tabnew tab1
+  tabnew tab2
+
+  call assert_equal(3, tabpagenr())
+  exe "norm! \<C-PageUp>"
+  call assert_equal(2, tabpagenr())
+  exe "norm! \<C-PageDown>"
+  call assert_equal(3, tabpagenr())
+
+  " Check wrapping at last or first page.
+  exe "norm! \<C-PageDown>"
+  call assert_equal(1, tabpagenr())
+  exe "norm! \<C-PageUp>"
+  call assert_equal(3, tabpagenr())
+
+ " With a count, <C-PageUp> and <C-PageDown> are not symmetrical somehow:
+ " - {count}<C-PageUp> goes {count} pages downward (relative count)
+ " - {count}<C-PageDown> goes to page number {count} (absolute count)
+  exe "norm! 2\<C-PageUp>"
+  call assert_equal(1, tabpagenr())
+  exe "norm! 2\<C-PageDown>"
+  call assert_equal(2, tabpagenr())
+
+  1tabonly!
 endfunc
 
 " Test for [count] of tabclose
@@ -368,7 +455,7 @@ function Test_tabpage_with_tabclose()
         let err_code = 'E16:'
       else
         let entire_cmd = 'tabclose ' . c
-        let err_code = 'E474:'
+        let err_code = 'E475:'
       endif
       call assert_fails(entire_cmd, err_code)
       call assert_equal(6, tabpagenr('$'))
@@ -377,8 +464,8 @@ function Test_tabpage_with_tabclose()
 
   call assert_fails('3tabclose', 'E37:')
   call assert_fails('tabclose 3', 'E37:')
-  call assert_fails('tabclose -+', 'E474:')
-  call assert_fails('tabclose +2-', 'E474:')
+  call assert_fails('tabclose -+', 'E475:')
+  call assert_fails('tabclose +2-', 'E475:')
   call assert_equal(6, tabpagenr('$'))
 
   1tabonly!
@@ -423,7 +510,7 @@ function Test_tabpage_with_tabonly()
         let err_code = 'E16:'
       else
         let entire_cmd = 'tabonly ' . c
-        let err_code = 'E474:'
+        let err_code = 'E475:'
       endif
       call assert_fails(entire_cmd, err_code)
       call assert_equal(6, tabpagenr('$'))
@@ -434,13 +521,13 @@ function Test_tabpage_with_tabonly()
   for c in tc
     call s:reconstruct_tabpage_for_test(6)
     let entire_cmd = 'tabonly' . c[2] . ' ' . c[1]
-    let err_code = 'E474:'
+    let err_code = 'E475:'
     call assert_fails(entire_cmd, err_code)
     call assert_equal(6, tabpagenr('$'))
   endfor
 
-  call assert_fails('tabonly -+', 'E474:')
-  call assert_fails('tabonly +2-', 'E474:')
+  call assert_fails('tabonly -+', 'E475:')
+  call assert_fails('tabonly +2-', 'E475:')
   call assert_equal(6, tabpagenr('$'))
 
   1tabonly!
@@ -473,5 +560,290 @@ func Test_tabnext_on_buf_unload2()
   endwhile
 endfunc
 
+func Test_close_on_quitpre()
+  " This once caused a crash
+  edit Xtest
+  new
+  only
+  set bufhidden=delete
+  au QuitPre <buffer> close
+  tabnew tab1
+  tabnew tab2
+  1tabn
+  q!
+  call assert_equal(1, tabpagenr())
+  call assert_equal(2, tabpagenr('$'))
+  " clean up
+  while tabpagenr('$') > 1
+    bwipe!
+  endwhile
+  buf Xtest
+endfunc
+
+func Test_tabs()
+  enew!
+  tabnew tab1
+  norm ixxx
+  let a=split(execute(':tabs'), "\n")
+  call assert_equal(['Tab page 1',
+      \              '    [No Name]',
+      \              'Tab page 2',
+      \              '> + tab1'], a)
+
+  1tabonly!
+  bw!
+endfunc
+
+func Test_tabpage_cmdheight()
+  CheckRunVimInTerminal
+  call writefile([
+        \ 'set laststatus=2',
+        \ 'set cmdheight=2',
+        \ 'tabnew',
+        \ 'set cmdheight=3',
+        \ 'tabnext',
+        \ 'redraw!',
+        \ 'echo "hello\nthere"',
+        \ 'tabnext',
+        \ 'redraw',
+	\ ], 'XTest_tabpage_cmdheight')
+  " Check that cursor line is concealed
+  let buf = RunVimInTerminal('-S XTest_tabpage_cmdheight', {'statusoff': 3})
+  call VerifyScreenDump(buf, 'Test_tabpage_cmdheight', {})
+
+  call StopVimInTerminal(buf)
+  call delete('XTest_tabpage_cmdheight')
+endfunc
+
+" Test for closing the tab page from a command window
+func Test_tabpage_close_cmdwin()
+  tabnew
+  call feedkeys("q/:tabclose\<CR>\<Esc>", 'xt')
+  call assert_equal(2, tabpagenr('$'))
+  call feedkeys("q/:tabonly\<CR>\<Esc>", 'xt')
+  call assert_equal(2, tabpagenr('$'))
+  tabonly
+endfunc
+
+" Pressing <C-PageUp> in insert mode should go to the previous tab page
+" and <C-PageDown> should go to the next tab page
+func Test_tabpage_Ctrl_Pageup()
+  tabnew
+  call feedkeys("i\<C-PageUp>", 'xt')
+  call assert_equal(1, tabpagenr())
+  call feedkeys("i\<C-PageDown>", 'xt')
+  call assert_equal(2, tabpagenr())
+  %bw!
+endfunc
+
+" Return the terminal key code for selecting a tab page from the tabline. This
+" sequence contains the following codes: a CSI (0x9b), KS_TABLINE (0xf0),
+" KS_FILLER (0x58) and then the tab page number.
+func TabLineSelectPageCode(tabnr)
+  return "\x9b\xf0\x58" ..  nr2char(a:tabnr)
+endfunc
+
+" Return the terminal key code for opening a new tabpage from the tabpage
+" menu. This sequence consists of the following codes: a CSI (0x9b),
+" KS_TABMENU (0xef), KS_FILLER (0x58), the tab page number and
+" TABLINE_MENU_NEW (2).
+func TabMenuNewItemCode(tabnr)
+  return "\x9b\xef\x58" .. nr2char(a:tabnr) .. nr2char(2)
+endfunc
+
+" Return the terminal key code for closing a tabpage from the tabpage menu.
+" This sequence consists of the following codes: a CSI (0x9b), KS_TABMENU
+" (0xef), KS_FILLER (0x58), the tab page number and TABLINE_MENU_CLOSE (1).
+func TabMenuCloseItemCode(tabnr)
+  return "\x9b\xef\x58" .. nr2char(a:tabnr) .. nr2char(1)
+endfunc
+
+" Test for using the tabpage menu from the insert and normal modes
+func Test_tabline_tabmenu()
+  " only works in GUI
+  CheckGui
+
+  %bw!
+  tabnew
+  tabnew
+  call assert_equal(3, tabpagenr())
+
+  " go to tab page 2 in normal mode
+  call feedkeys(TabLineSelectPageCode(2), "Lx!")
+  call assert_equal(2, tabpagenr())
+
+  " close tab page 3 in normal mode
+  call feedkeys(TabMenuCloseItemCode(3), "Lx!")
+  call assert_equal(2, tabpagenr('$'))
+  call assert_equal(2, tabpagenr())
+
+  " open new tab page before tab page 1 in normal mode
+  call feedkeys(TabMenuNewItemCode(1), "Lx!")
+  call assert_equal(1, tabpagenr())
+  call assert_equal(3, tabpagenr('$'))
+
+  " go to tab page 2 in operator-pending mode (should beep)
+  call assert_beeps('call feedkeys("f" .. TabLineSelectPageCode(2), "Lx!")')
+
+  " open new tab page before tab page 1 in operator-pending mode (should beep)
+  call assert_beeps('call feedkeys("f" .. TabMenuNewItemCode(1), "Lx!")')
+
+  " open new tab page after tab page 3 in normal mode
+  call feedkeys(TabMenuNewItemCode(4), "Lx!")
+  call assert_equal(4, tabpagenr())
+  call assert_equal(4, tabpagenr('$'))
+
+  " go to tab page 2 in insert mode
+  call feedkeys("i" .. TabLineSelectPageCode(2) .. "\<C-C>", "Lx!")
+  call assert_equal(2, tabpagenr())
+
+  " close tab page 2 in insert mode
+  call feedkeys("i" .. TabMenuCloseItemCode(2) .. "\<C-C>", "Lx!")
+  call assert_equal(3, tabpagenr('$'))
+
+  " open new tab page before tab page 3 in insert mode
+  call feedkeys("i" .. TabMenuNewItemCode(3) .. "\<C-C>", "Lx!")
+  call assert_equal(3, tabpagenr())
+  call assert_equal(4, tabpagenr('$'))
+
+  " open new tab page after tab page 4 in insert mode
+  call feedkeys("i" .. TabMenuNewItemCode(5) .. "\<C-C>", "Lx!")
+  call assert_equal(5, tabpagenr())
+  call assert_equal(5, tabpagenr('$'))
+
+  %bw!
+endfunc
+
+" Test for changing the current tab page from an autocmd when closing a tab
+" page.
+func Test_tabpage_switchtab_on_close()
+  only
+  tabnew
+  tabnew
+  " Test for BufLeave
+  augroup T1
+    au!
+    au BufLeave * tabfirst
+  augroup END
+  tabclose
+  call assert_equal(1, tabpagenr())
+  augroup T1
+    au!
+  augroup END
+
+  " Test for WinLeave
+  $tabnew
+  augroup T1
+    au!
+    au WinLeave * tabfirst
+  augroup END
+  tabclose
+  call assert_equal(1, tabpagenr())
+  augroup T1
+    au!
+  augroup END
+
+  " Test for TabLeave
+  $tabnew
+  augroup T1
+    au!
+    au TabLeave * tabfirst
+  augroup END
+  tabclose
+  call assert_equal(1, tabpagenr())
+  augroup T1
+    au!
+  augroup END
+  augroup! T1
+  tabonly
+endfunc
+
+" Test for closing the destination tabpage when jumping from one to another.
+func Test_tabpage_close_on_switch()
+  tabnew
+  tabnew
+  edit Xfile
+  augroup T2
+    au!
+    au BufLeave Xfile 1tabclose
+  augroup END
+  tabfirst
+  call assert_equal(2, tabpagenr())
+  call assert_equal('Xfile', @%)
+  augroup T2
+    au!
+  augroup END
+  augroup! T2
+  %bw!
+endfunc
+
+" Test for jumping to last accessed tabpage
+func Test_lastused_tabpage()
+  tabonly!
+  call assert_equal(0, tabpagenr('#'))
+  call assert_beeps('call feedkeys("g\<Tab>", "xt")')
+  call assert_beeps('call feedkeys("\<C-Tab>", "xt")')
+  call assert_beeps('call feedkeys("\<C-W>g\<Tab>", "xt")')
+  call assert_fails('tabnext #', 'E475:')
+
+  " open four tab pages
+  tabnew
+  tabnew
+  tabnew
+
+  2tabnext
+
+  " Test for g<Tab>
+  call assert_equal(4, tabpagenr('#'))
+  call feedkeys("g\<Tab>", "xt")
+  call assert_equal(4, tabpagenr())
+  call assert_equal(2, tabpagenr('#'))
+
+  " Test for <C-Tab>
+  call feedkeys("\<C-Tab>", "xt")
+  call assert_equal(2, tabpagenr())
+  call assert_equal(4, tabpagenr('#'))
+
+  " Test for <C-W>g<Tab>
+  call feedkeys("\<C-W>g\<Tab>", "xt")
+  call assert_equal(4, tabpagenr())
+  call assert_equal(2, tabpagenr('#'))
+
+  " Test for :tabnext #
+  tabnext #
+  call assert_equal(2, tabpagenr())
+  call assert_equal(4, tabpagenr('#'))
+
+  " Try to jump to a closed tab page
+  tabclose #
+  call assert_equal(0, tabpagenr('#'))
+  call feedkeys("g\<Tab>", "xt")
+  call assert_equal(2, tabpagenr())
+  call feedkeys("\<C-Tab>", "xt")
+  call assert_equal(2, tabpagenr())
+  call feedkeys("\<C-W>g\<Tab>", "xt")
+  call assert_equal(2, tabpagenr())
+  call assert_fails('tabnext #', 'E475:')
+  call assert_equal(2, tabpagenr())
+
+  " Test for :tabonly #
+  let wnum = win_getid()
+  $tabnew
+  tabonly #
+  call assert_equal(wnum, win_getid())
+  call assert_equal(1, tabpagenr('$'))
+
+  " Test for :tabmove #
+  tabnew
+  let wnum = win_getid()
+  tabnew
+  tabnew
+  tabnext 2
+  tabmove #
+  call assert_equal(4, tabpagenr())
+  call assert_equal(wnum, win_getid())
+
+  tabonly!
+endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

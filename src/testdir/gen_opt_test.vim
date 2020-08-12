@@ -10,6 +10,8 @@ set nomore
 " The terminal size is restored at the end.
 " Clear out t_WS, we don't want to resize the actual terminal.
 let script = [
+      \ '" DO NOT EDIT: Generated with gen_opt_test.vim',
+      \ '',
       \ 'let save_columns = &columns',
       \ 'let save_lines = &lines',
       \ 'let save_term = &term',
@@ -18,6 +20,9 @@ let script = [
 
 /#define p_term
 let end = line('.')
+
+" font name that works everywhere (hopefully)
+let fontname = has('win32') ? 'fixedsys' : 'fixed'
 
 " Two lists with values: values that work and values that fail.
 " When not listed, "othernum" or "otherstring" is used.
@@ -31,9 +36,10 @@ let test_values = {
       \ 'history': [[0, 1, 100], [-1, 10001]],
       \ 'iminsert': [[0, 1], [-1, 3, 999]],
       \ 'imsearch': [[-1, 0, 1], [-2, 3, 999]],
+      \ 'imstyle': [[0, 1], [-1, 2, 999]],
       \ 'lines': [[2, 24], [-1, 0, 1]],
       \ 'linespace': [[0, 2, 4], ['']],
-      \ 'numberwidth': [[1, 4, 8, 10], [-1, 0, 11]],
+      \ 'numberwidth': [[1, 4, 8, 10, 11, 20], [-1, 0, 21]],
       \ 'regexpengine': [[0, 1, 2], [-1, 3, 999]],
       \ 'report': [[0, 1, 2, 9999], [-1]],
       \ 'scroll': [[0, 1, 2, 20], [-1]],
@@ -57,7 +63,7 @@ let test_values = {
       \
       \ 'ambiwidth': [['', 'single'], ['xxx']],
       \ 'background': [['', 'light', 'dark'], ['xxx']],
-      \ 'backspace': [[0, 2, '', 'eol', 'eol,start'], ['xxx']],
+      \ 'backspace': [[0, 2, 3, '', 'eol', 'eol,start', 'indent,eol,nostop'], ['4', 'xxx']],
       \ 'backupcopy': [['yes', 'auto'], ['', 'xxx', 'yes,no']],
       \ 'backupext': [['xxx'], ['']],
       \ 'belloff': [['', 'all', 'copy,error'], ['xxx']],
@@ -67,17 +73,20 @@ let test_values = {
       \ 'buftype': [['', 'help', 'nofile'], ['xxx', 'help,nofile']],
       \ 'casemap': [['', 'internal'], ['xxx']],
       \ 'cedit': [['', '\<Esc>'], ['xxx', 'f']],
-      \ 'clipboard': [['', 'unnamed', 'autoselect,unnamed'], ['xxx']],
+      \ 'clipboard': [['', 'unnamed', 'autoselect,unnamed', 'html', 'exclude:vimdisplay'], ['xxx', '\ze*']],
       \ 'colorcolumn': [['', '8', '+2'], ['xxx']],
       \ 'comments': [['', 'b:#'], ['xxx']],
       \ 'commentstring': [['', '/*%s*/'], ['xxx']],
       \ 'complete': [['', 'w,b'], ['xxx']],
       \ 'concealcursor': [['', 'n', 'nvic'], ['xxx']],
       \ 'completeopt': [['', 'menu', 'menu,longest'], ['xxx', 'menu,,,longest,']],
+      \ 'completepopup': [['', 'height:13', 'highlight:That', 'width:10,height:234,highlight:Mine'], ['height:yes', 'width:no', 'xxx', 'xxx:99', 'border:maybe', 'border:1']],
+      \ 'completeslash': [['', 'slash', 'backslash'], ['xxx']],
       \ 'cryptmethod': [['', 'zip'], ['xxx']],
       \ 'cscopequickfix': [['', 's-', 's-,c+,e0'], ['xxx', 's,g,d']],
+      \ 'cursorlineopt': [['both', 'line', 'number', 'screenline', 'line,number'], ['', 'xxx', 'line,screenline']],
       \ 'debug': [['', 'msg', 'msg', 'beep'], ['xxx']],
-      \ 'diffopt': [['', 'filler', 'icase,iwhite'], ['xxx']],
+      \ 'diffopt': [['', 'filler', 'icase,iwhite'], ['xxx', 'algorithm:xxx', 'algorithm:']],
       \ 'display': [['', 'lastline', 'lastline,uhex'], ['xxx']],
       \ 'eadirection': [['', 'both', 'ver'], ['xxx', 'ver,hor']],
       \ 'encoding': [['latin1'], ['xxx', '']],
@@ -92,10 +101,12 @@ let test_values = {
       \ 'foldmarker': [['((,))'], ['', 'xxx']],
       \ 'formatoptions': [['', 'vt', 'v,t'], ['xxx']],
       \ 'guicursor': [['', 'n:block-Cursor'], ['xxx']],
-      \ 'guifont': [['', 'fixedsys'], []],
-      \ 'guifontwide': [['', 'fixedsys'], []],
+      \ 'guifont': [['', fontname], []],
+      \ 'guifontwide': [['', fontname], []],
+      \ 'guifontset': [['', fontname], []],
       \ 'helplang': [['', 'de', 'de,it'], ['xxx']],
       \ 'highlight': [['', 'e:Error'], ['xxx']],
+      \ 'imactivatekey': [['', 'S-space'], ['xxx']],
       \ 'isfname': [['', '@', '@,48-52'], ['xxx', '@48']],
       \ 'isident': [['', '@', '@,48-52'], ['xxx', '@48']],
       \ 'iskeyword': [['', '@', '@,48-52'], ['xxx', '@48']],
@@ -110,28 +121,37 @@ let test_values = {
       \ 'mousemodel': [['', 'popup'], ['xxx']],
       \ 'mouseshape': [['', 'n:arrow'], ['xxx']],
       \ 'nrformats': [['', 'alpha', 'alpha,hex,bin'], ['xxx']],
+      \ 'previewpopup': [['', 'height:13', 'width:10,height:234'], ['height:yes', 'xxx', 'xxx:99']],
       \ 'printmbfont': [['', 'r:some', 'b:Bold,c:yes'], ['xxx']],
       \ 'printoptions': [['', 'header:0', 'left:10pc,top:5pc'], ['xxx']],
       \ 'scrollopt': [['', 'ver', 'ver,hor'], ['xxx']],
-      \ 'renderoptions': [['', 'type:directx'], ['xxx']],
+      \ 'renderoptions': [[''], ['xxx']],
       \ 'selection': [['old', 'inclusive'], ['', 'xxx']],
       \ 'selectmode': [['', 'mouse', 'key,cmd'], ['xxx']],
       \ 'sessionoptions': [['', 'blank', 'help,options,slash'], ['xxx']],
       \ 'signcolumn': [['', 'auto', 'no'], ['xxx', 'no,yes']],
       \ 'spellfile': [['', 'file.en.add'], ['xxx', '/tmp/file']],
+      \ 'spelllang': [['', 'xxx', 'sr@latin'], ['not&lang', "that\\\rthere"]],
+      \ 'spelloptions': [['', 'camel'], ['xxx']],
       \ 'spellsuggest': [['', 'best', 'double,33'], ['xxx']],
       \ 'switchbuf': [['', 'useopen', 'split,newtab'], ['xxx']],
       \ 'tagcase': [['smart', 'match'], ['', 'xxx', 'smart,match']],
       \ 'term': [[], []],
+      \ 'termguicolors': [[], []],
+      \ 'termencoding': [has('gui_gtk') ? [] : ['', 'utf-8'], ['xxx']],
+      \ 'termwinsize': [['', '24x80', '0x80', '32x0', '0x0'], ['xxx', '80', '8ax9', '24x80b']],
+      \ 'termwintype': [['', 'winpty', 'conpty'], ['xxx']],
       \ 'toolbar': [['', 'icons', 'text'], ['xxx']],
       \ 'toolbariconsize': [['', 'tiny', 'huge'], ['xxx']],
       \ 'ttymouse': [['', 'xterm'], ['xxx']],
       \ 'ttytype': [[], []],
+      \ 'varsofttabstop': [['8', '4,8,16,32'], ['xxx', '-1', '4,-1,20']],
+      \ 'vartabstop': [['8', '4,8,16,32'], ['xxx', '-1', '4,-1,20']],
       \ 'viewoptions': [['', 'cursor', 'unix,slash'], ['xxx']],
       \ 'viminfo': [['', '''50', '"30'], ['xxx']],
       \ 'virtualedit': [['', 'all', 'all,block'], ['xxx']],
       \ 'whichwrap': [['', 'b,s', 'bs'], ['xxx']],
-      \ 'wildmode': [['', 'full', 'list:full', 'full,longest'], ['xxx']],
+      \ 'wildmode': [['', 'full', 'list:full', 'full,longest'], ['xxx', 'a4', 'full,full,full,full,full']],
       \ 'wildoptions': [['', 'tagfile'], ['xxx']],
       \ 'winaltkeys': [['menu', 'no'], ['', 'xxx']],
       \
@@ -186,8 +206,11 @@ while 1
       call add(script, "endif")
     endif
 
-    call add(script, 'set ' . name . '&')
-    call add(script, 'set ' . shortname . '&')
+    " cannot change 'termencoding' in GTK
+    if name != 'termencoding' || !has('gui_gtk')
+      call add(script, 'set ' . name . '&')
+      call add(script, 'set ' . shortname . '&')
+    endif
     if name == 'verbosefile'
       call add(script, 'call delete("xxx")')
     endif
