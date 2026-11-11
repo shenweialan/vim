@@ -1,4 +1,4 @@
-/* gui_x11.c */
+// gui_x11.c
 void gui_x11_key_hit_cb(Widget w, XtPointer dud, XEvent *event, Boolean *dum);
 void gui_mch_prepare(int *argc, char **argv);
 int gui_mch_init_check(void);
@@ -23,8 +23,8 @@ void gui_mch_free_font(GuiFont font);
 void gui_mch_free_fontset(GuiFontset fontset);
 GuiFontset gui_mch_get_fontset(char_u *name, int giveErrorIfMissing, int fixed_width);
 int fontset_height(XFontSet fs);
-int fontset_height2(XFontSet fs);
 guicolor_T gui_mch_get_color(char_u *name);
+guicolor_T gui_mch_get_rgb_color(int r, int g, int b);
 void gui_mch_set_fg_color(guicolor_T color);
 void gui_mch_set_bg_color(guicolor_T color);
 void gui_mch_set_sp_color(guicolor_T color);
@@ -45,10 +45,10 @@ void gui_mch_clear_block(int row1, int col1, int row2, int col2);
 void gui_mch_clear_all(void);
 void gui_mch_delete_lines(int row, int num_lines);
 void gui_mch_insert_lines(int row, int num_lines);
-void clip_mch_lose_selection(VimClipboard *cbd);
-int clip_mch_own_selection(VimClipboard *cbd);
-void clip_mch_request_selection(VimClipboard *cbd);
-void clip_mch_set_selection(VimClipboard *cbd);
+void clip_mch_lose_selection(Clipboard_T *cbd);
+int clip_mch_own_selection(Clipboard_T *cbd);
+void clip_mch_request_selection(Clipboard_T *cbd);
+void clip_mch_set_selection(Clipboard_T *cbd);
 void gui_mch_menu_grey(vimmenu_T *menu, int grey);
 void gui_mch_menu_hidden(vimmenu_T *menu, int hidden);
 void gui_mch_draw_menubar(void);
@@ -56,7 +56,7 @@ void gui_x11_menu_cb(Widget w, XtPointer client_data, XtPointer call_data);
 int gui_mch_is_blinking(void);
 int gui_mch_is_blink_off(void);
 void gui_mch_set_blinking(long waittime, long on, long off);
-void gui_mch_stop_blink(void);
+void gui_mch_stop_blink(int may_call_gui_update_cursor);
 void gui_mch_start_blink(void);
 guicolor_T gui_mch_get_rgb(guicolor_T pixel);
 void gui_x11_callbacks(Widget textArea, Widget vimForm);
@@ -69,4 +69,4 @@ void gui_mch_destroy_sign(void *sign);
 void gui_mch_mousehide(int hide);
 void mch_set_mouse_shape(int shape);
 void gui_mch_menu_set_tip(vimmenu_T *menu);
-/* vim: set ft=c : */
+// vim: ft=c

@@ -1,4 +1,5 @@
-/* pty.c */
-int SetupSlavePTY(int fd);
-int OpenPTY(char **ttyn);
-/* vim: set ft=c : */
+// pty.c
+int setup_slavepty(int fd);
+int mch_openpty(char **ttyn);
+int mch_isatty(int fd);
+// vim: ft=c

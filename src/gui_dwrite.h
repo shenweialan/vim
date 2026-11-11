@@ -4,6 +4,7 @@
  *
  * Contributors:
  *  - Ken Takata
+ *  - Yasuhiro Matsumoto
  *
  * Copyright (C) 2013 MURAOKA Taro <koron.kaoriya@gmail.com>
  * THIS FILE IS DISTRIBUTED UNDER THE VIM LICENSE.
@@ -50,25 +51,38 @@ typedef struct DWriteRenderingParams {
     int textAntialiasMode;
 } DWriteRenderingParams;
 
+#define DWRITE_MAX_FONT_FEATURES 32
+
+typedef struct DWriteFontFeature {
+    unsigned int tag;	    // OpenType feature tag (4 bytes)
+    unsigned int parameter; // Feature parameter (0 = disable, 1 = enable)
+} DWriteFontFeature;
+
 void DWrite_Init(void);
 void DWrite_Final(void);
 
 DWriteContext *DWriteContext_Open(void);
-void DWriteContext_BeginDraw(DWriteContext *ctx);
-void DWriteContext_BindDC(DWriteContext *ctx, HDC hdc, RECT *rect);
+void DWriteContext_BindDC(DWriteContext *ctx, HDC hdc, const RECT *rect);
 void DWriteContext_SetFont(DWriteContext *ctx, HFONT hFont);
 void DWriteContext_DrawText(
 	DWriteContext *ctx,
-	HDC hdc,
-	const WCHAR* text,
+	const WCHAR *text,
 	int len,
 	int x,
 	int y,
 	int w,
 	int h,
 	int cellWidth,
+	COLORREF color,
+	UINT fuOptions,
+	const RECT *lprc,
+	const INT *lpDx);
+void DWriteContext_FillRect(DWriteContext *ctx, const RECT *rc, COLORREF color);
+void DWriteContext_DrawLine(DWriteContext *ctx, int x1, int y1, int x2, int y2,
 	COLORREF color);
-void DWriteContext_EndDraw(DWriteContext *ctx);
+void DWriteContext_SetPixel(DWriteContext *ctx, int x, int y, COLORREF color);
+void DWriteContext_Scroll(DWriteContext *ctx, int x, int y, const RECT *rc);
+void DWriteContext_Flush(DWriteContext *ctx);
 void DWriteContext_Close(DWriteContext *ctx);
 
 void DWriteContext_SetRenderingParams(
@@ -78,6 +92,11 @@ void DWriteContext_SetRenderingParams(
 DWriteRenderingParams *DWriteContext_GetRenderingParams(
 	DWriteContext *ctx,
 	DWriteRenderingParams *params);
+
+void DWriteContext_SetFontFeatures(
+	DWriteContext *ctx,
+	const DWriteFontFeature *features,
+	int count);
 
 #ifdef __cplusplus
 }

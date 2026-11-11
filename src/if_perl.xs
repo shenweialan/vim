@@ -24,29 +24,20 @@
 # define _USE_32BIT_TIME_T
 #endif
 
-/*
- * Prevent including winsock.h.  perl.h tries to detect whether winsock.h is
- * already included before including winsock2.h, because winsock2.h isn't
- * compatible with winsock.h.  However the detection doesn't work with some
- * versions of MinGW.  If WIN32_LEAN_AND_MEAN is defined, windows.h will not
- * include winsock.h.
- */
-#ifdef WIN32
-# define WIN32_LEAN_AND_MEAN
-#endif
-
 #include "vim.h"
 
-/* Work around for perl-5.18.
- * Don't include "perl\lib\CORE\inline.h" for now,
- * include it after Perl_sv_free2 is defined. */
-#ifdef DYNAMIC_PERL
-# define PERL_NO_INLINE_FUNCTIONS
+#ifdef _MSC_VER
+// Work around for using MSVC and ActivePerl 5.18.
+# define __inline__ __inline
+// Work around for using MSVC and Strawberry Perl 5.30.
+# define __builtin_expect(expr, val) (expr)
+// Work around for using MSVC and Strawberry Perl 5.32.
+# define NO_THREAD_SAFE_LOCALE
 #endif
 
-/* Work around for using MSVC and ActivePerl 5.18. */
-#ifdef _MSC_VER
-# define __inline__ __inline
+#if defined(MSWIN) && defined(DYNAMIC_PERL)
+// Work around for warning C4273 (inconsistent DLL linkage).
+# define PERL_EXT_RE_BUILD
 #endif
 
 #ifdef __GNUC__
@@ -57,8 +48,13 @@
 #include <EXTERN.h>
 #include <perl.h>
 #include <XSUB.h>
-#if defined(PERLIO_LAYERS) && !defined(USE_SFIO)
+#if defined(PERLIO_LAYERS)
 # include <perliol.h>
+#endif
+
+#if defined(DYNAMIC_PERL) && ((PERL_REVISION == 5) && (PERL_VERSION >= 38))
+// Copy/pasted from perl.h
+const char PL_memory_wrap[] = "panic: memory wrap";
 #endif
 
 /* Workaround for perl < 5.8.7 */
@@ -84,19 +80,24 @@
 #ifndef PROTO
 # ifndef __MINGW32__
 #  include "proto/if_perl.pro"
-#  include "proto/if_perlsfio.pro"
 # endif
 #endif
 
-/* Perl compatibility stuff. This should ensure compatibility with older
- * versions of Perl.
- */
-
+// Perl compatibility stuff. This should ensure compatibility with older
+// versions of Perl.
 #ifndef PERL_VERSION
 # include <patchlevel.h>
 # define PERL_REVISION   5
 # define PERL_VERSION    PATCHLEVEL
 # define PERL_SUBVERSION SUBVERSION
+#endif
+
+
+// Work around for ActivePerl 5.20.3+: Avoid generating (g)vim.lib.
+#if defined(ACTIVEPERL_VERSION) && (ACTIVEPERL_VERSION >= 2003) \
+	&& defined(MSWIN) && defined(USE_DYNAMIC_LOADING)
+# undef XS_EXTERNAL
+# define XS_EXTERNAL(name) XSPROTO(name)
 #endif
 
 /*
@@ -135,6 +136,11 @@
 # define EXTERN_C
 #endif
 
+// Suppress Infinite warnings when compiling XS modules under macOS 12 Monterey.
+#if defined(__clang__) && defined(__clang_major__) && __clang_major__ > 11
+# pragma clang diagnostic ignored "-Wcompound-token-split-by-macro"
+#endif
+
 /* Compatibility hacks over */
 
 static PerlInterpreter *perl_interp = NULL;
@@ -145,10 +151,10 @@ EXTERN_C void boot_DynaLoader(pTHX_ CV*);
 /*
  * For dynamic linked perl.
  */
-#if defined(DYNAMIC_PERL) || defined(PROTO)
+#if defined(DYNAMIC_PERL)
 
 # ifndef DYNAMIC_PERL /* just generating prototypes */
-#  ifdef WIN3264
+#  ifdef MSWIN
 typedef int HANDLE;
 #  endif
 typedef int XSINIT_t;
@@ -158,18 +164,20 @@ typedef int XSUBADDR_t;
 typedef int perl_key;
 # endif
 
-# ifndef WIN3264
+# ifdef MSWIN
+#  define PERL_PROC FARPROC
+#  define load_dll vimLoadLib
+#  define symbol_from_dll GetProcAddress
+#  define close_dll FreeLibrary
+#  define load_dll_error GetWin32Error
+# else
 #  include <dlfcn.h>
 #  define HANDLE void*
 #  define PERL_PROC void*
 #  define load_dll(n) dlopen((n), RTLD_LAZY|RTLD_GLOBAL)
 #  define symbol_from_dll dlsym
 #  define close_dll dlclose
-# else
-#  define PERL_PROC FARPROC
-#  define load_dll vimLoadLib
-#  define symbol_from_dll GetProcAddress
-#  define close_dll FreeLibrary
+#  define load_dll_error dlerror
 # endif
 /*
  * Wrapper defines
@@ -180,13 +188,17 @@ typedef int perl_key;
 # define perl_run dll_perl_run
 # define perl_destruct dll_perl_destruct
 # define perl_free dll_perl_free
-# define Perl_get_context dll_Perl_get_context
+# if defined(WIN32) || ((PERL_REVISION == 5) && (PERL_VERSION < 38))
+#  define Perl_get_context dll_Perl_get_context
+# endif
 # define Perl_croak dll_Perl_croak
 # ifdef PERL5101_OR_LATER
 #  define Perl_croak_xs_usage dll_Perl_croak_xs_usage
 # endif
 # ifndef PROTO
-#  define Perl_croak_nocontext dll_Perl_croak_nocontext
+#  if defined(PERL_IMPLICIT_CONTEXT)
+#   define Perl_croak_nocontext dll_Perl_croak_nocontext
+#  endif
 #  define Perl_call_argv dll_Perl_call_argv
 #  define Perl_call_pv dll_Perl_call_pv
 #  define Perl_eval_sv dll_Perl_eval_sv
@@ -199,6 +211,9 @@ typedef int perl_key;
 # define Perl_gv_stashpv dll_Perl_gv_stashpv
 # define Perl_markstack_grow dll_Perl_markstack_grow
 # define Perl_mg_find dll_Perl_mg_find
+# if (PERL_REVISION == 5) && (PERL_VERSION >= 28)
+#  define Perl_mg_get dll_Perl_mg_get
+# endif
 # define Perl_newXS dll_Perl_newXS
 # define Perl_newSV dll_Perl_newSV
 # define Perl_newSViv dll_Perl_newSViv
@@ -227,6 +242,10 @@ typedef int perl_key;
 # else
 #  define Perl_sv_2pv dll_Perl_sv_2pv
 # endif
+# if (PERL_REVISION == 5) && (PERL_VERSION >= 32)
+#  define Perl_sv_2pvbyte_flags dll_Perl_sv_2pvbyte_flags
+# endif
+# define Perl_sv_2pvbyte dll_Perl_sv_2pvbyte
 # define Perl_sv_bless dll_Perl_sv_bless
 # if (PERL_REVISION == 5) && (PERL_VERSION >= 8)
 #  define Perl_sv_catpvn_flags dll_Perl_sv_catpvn_flags
@@ -294,6 +313,9 @@ typedef int perl_key;
 #   define PL_thr_key *dll_PL_thr_key
 #  endif
 # endif
+# ifdef PERL_USE_THREAD_LOCAL
+#  define PL_current_context *dll_PL_current_context
+# endif
 # define Perl_hv_iternext_flags dll_Perl_hv_iternext_flags
 # define Perl_hv_iterinit dll_Perl_hv_iterinit
 # define Perl_hv_iterkey dll_Perl_hv_iterkey
@@ -301,7 +323,7 @@ typedef int perl_key;
 # define Perl_av_fetch dll_Perl_av_fetch
 # define Perl_av_len dll_Perl_av_len
 # define Perl_sv_2nv_flags dll_Perl_sv_2nv_flags
-# if defined(PERLIO_LAYERS) && !defined(USE_SFIO)
+# if defined(PERLIO_LAYERS)
 #  define PerlIOBase_pushed dll_PerlIOBase_pushed
 #  define PerlIO_define_layer dll_PerlIO_define_layer
 # endif
@@ -314,13 +336,15 @@ typedef int perl_key;
  */
 static HANDLE hPerlLib = NULL;
 
-static PerlInterpreter* (*perl_alloc)();
+static PerlInterpreter* (*perl_alloc)(void);
 static void (*perl_construct)(PerlInterpreter*);
 static void (*perl_destruct)(PerlInterpreter*);
 static void (*perl_free)(PerlInterpreter*);
 static int (*perl_run)(PerlInterpreter*);
 static int (*perl_parse)(PerlInterpreter*, XSINIT_t, int, char**, char**);
+# if defined(WIN32) || ((PERL_REVISION == 5) && (PERL_VERSION < 38))
 static void* (*Perl_get_context)(void);
+# endif
 static void (*Perl_croak)(pTHX_ const char*, ...) __attribute__noreturn__;
 # ifdef PERL5101_OR_LATER
 /* Perl-5.18 has a different Perl_croak_xs_usage signature. */
@@ -332,7 +356,9 @@ static void (*Perl_croak_xs_usage)(pTHX_ const CV *const, const char *const para
 						    __attribute__noreturn__;
 #  endif
 # endif
+# if defined(PERL_IMPLICIT_CONTEXT)
 static void (*Perl_croak_nocontext)(const char*, ...) __attribute__noreturn__;
+# endif
 static I32 (*Perl_dowantarray)(pTHX);
 static void (*Perl_free_tmps)(pTHX);
 static HV* (*Perl_gv_stashpv)(pTHX_ const char*, I32);
@@ -342,6 +368,9 @@ static I32* (*Perl_markstack_grow)(pTHX);
 static void (*Perl_markstack_grow)(pTHX);
 # endif
 static MAGIC* (*Perl_mg_find)(pTHX_ SV*, int);
+# if (PERL_REVISION == 5) && (PERL_VERSION >= 28)
+static int (*Perl_mg_get)(pTHX_ SV*);
+# endif
 static CV* (*Perl_newXS)(pTHX_ char*, XSUBADDR_t, char*);
 static SV* (*Perl_newSV)(pTHX_ STRLEN);
 static SV* (*Perl_newSViv)(pTHX_ IV);
@@ -371,10 +400,14 @@ static bool (*Perl_sv_2bool)(pTHX_ SV*);
 static IV (*Perl_sv_2iv)(pTHX_ SV*);
 static SV* (*Perl_sv_2mortal)(pTHX_ SV*);
 # if (PERL_REVISION == 5) && (PERL_VERSION >= 8)
-static char* (*Perl_sv_2pv_flags)(pTHX_ SV*, STRLEN*, I32);
+static char* (*Perl_sv_2pv_flags)(pTHX_ SV*, STRLEN* const, const U32);
 static char* (*Perl_sv_2pv_nolen)(pTHX_ SV*);
 # else
 static char* (*Perl_sv_2pv)(pTHX_ SV*, STRLEN*);
+# endif
+static char* (*Perl_sv_2pvbyte)(pTHX_ SV*, STRLEN*);
+# if (PERL_REVISION == 5) && (PERL_VERSION >= 32)
+static char* (*Perl_sv_2pvbyte_flags)(pTHX_ SV*, STRLEN* const, const U32);
 # endif
 static SV* (*Perl_sv_bless)(pTHX_ SV*, HV*);
 # if (PERL_REVISION == 5) && (PERL_VERSION >= 8)
@@ -452,6 +485,9 @@ static GV** (*Perl_Ierrgv_ptr)(register PerlInterpreter*);
 static SV* (*Perl_Isv_yes_ptr)(register PerlInterpreter*);
 static perl_key* (*Perl_Gthr_key_ptr)_((pTHX));
 # endif
+# ifdef PERL_USE_THREAD_LOCAL
+static void** dll_PL_current_context;
+# endif
 static void (*boot_DynaLoader)_((pTHX_ CV*));
 static HE * (*Perl_hv_iternext_flags)(pTHX_ HV *, I32);
 static I32 (*Perl_hv_iterinit)(pTHX_ HV *);
@@ -460,7 +496,7 @@ static SV * (*Perl_hv_iterval)(pTHX_ HV *, HE *);
 static SV** (*Perl_av_fetch)(pTHX_ AV *, SSize_t, I32);
 static SSize_t (*Perl_av_len)(pTHX_ AV *);
 static NV (*Perl_sv_2nv_flags)(pTHX_ SV *const, const I32);
-# if defined(PERLIO_LAYERS) && !defined(USE_SFIO)
+# if defined(PERLIO_LAYERS)
 static IV (*PerlIOBase_pushed)(pTHX_ PerlIO *, const char *, SV *, PerlIO_funcs *);
 static void (*PerlIO_define_layer)(pTHX_ PerlIO_funcs *);
 # endif
@@ -481,7 +517,9 @@ static struct {
     {"perl_free", (PERL_PROC*)&perl_free},
     {"perl_run", (PERL_PROC*)&perl_run},
     {"perl_parse", (PERL_PROC*)&perl_parse},
+# if defined(WIN32) || ((PERL_REVISION == 5) && (PERL_VERSION < 38))
     {"Perl_get_context", (PERL_PROC*)&Perl_get_context},
+# endif
     {"Perl_croak", (PERL_PROC*)&Perl_croak},
 # ifdef PERL5101_OR_LATER
     {"Perl_croak_xs_usage", (PERL_PROC*)&Perl_croak_xs_usage},
@@ -494,6 +532,9 @@ static struct {
     {"Perl_gv_stashpv", (PERL_PROC*)&Perl_gv_stashpv},
     {"Perl_markstack_grow", (PERL_PROC*)&Perl_markstack_grow},
     {"Perl_mg_find", (PERL_PROC*)&Perl_mg_find},
+# if (PERL_REVISION == 5) && (PERL_VERSION >= 28)
+    {"Perl_mg_get", (PERL_PROC*)&Perl_mg_get},
+# endif
     {"Perl_newXS", (PERL_PROC*)&Perl_newXS},
     {"Perl_newSV", (PERL_PROC*)&Perl_newSV},
     {"Perl_newSViv", (PERL_PROC*)&Perl_newSViv},
@@ -527,6 +568,10 @@ static struct {
     {"Perl_sv_2pv_nolen", (PERL_PROC*)&Perl_sv_2pv_nolen},
 # else
     {"Perl_sv_2pv", (PERL_PROC*)&Perl_sv_2pv},
+# endif
+    {"Perl_sv_2pvbyte", (PERL_PROC*)&Perl_sv_2pvbyte},
+# if (PERL_REVISION == 5) && (PERL_VERSION >= 32)
+    {"Perl_sv_2pvbyte_flags", (PERL_PROC*)&Perl_sv_2pvbyte_flags},
 # endif
 # ifdef PERL589_OR_LATER
     {"Perl_sv_2iv_flags", (PERL_PROC*)&Perl_sv_2iv_flags},
@@ -592,6 +637,9 @@ static struct {
 #  ifdef USE_ITHREADS
     {"PL_thr_key", (PERL_PROC*)&dll_PL_thr_key},
 #  endif
+#  ifdef PERL_USE_THREAD_LOCAL
+    {"PL_current_context", (PERL_PROC*)&dll_PL_current_context},
+#  endif
 # else
     {"Perl_Idefgv_ptr", (PERL_PROC*)&Perl_Idefgv_ptr},
     {"Perl_Ierrgv_ptr", (PERL_PROC*)&Perl_Ierrgv_ptr},
@@ -606,7 +654,7 @@ static struct {
     {"Perl_av_fetch", (PERL_PROC*)&Perl_av_fetch},
     {"Perl_av_len", (PERL_PROC*)&Perl_av_len},
     {"Perl_sv_2nv_flags", (PERL_PROC*)&Perl_sv_2nv_flags},
-# if defined(PERLIO_LAYERS) && !defined(USE_SFIO)
+# if defined(PERLIO_LAYERS)
     {"PerlIOBase_pushed", (PERL_PROC*)&PerlIOBase_pushed},
     {"PerlIO_define_layer", (PERL_PROC*)&PerlIO_define_layer},
 # endif
@@ -616,21 +664,11 @@ static struct {
     {"", NULL},
 };
 
-/* Work around for perl-5.18.
- * For now, only the definitions of S_SvREFCNT_dec are needed in
- * "perl\lib\CORE\inline.h". */
-# if (PERL_REVISION == 5) && (PERL_VERSION >= 18)
-static void
-S_SvREFCNT_dec(pTHX_ SV *sv)
-{
-    if (LIKELY(sv != NULL)) {
-	U32 rc = SvREFCNT(sv);
-	if (LIKELY(rc > 1))
-	    SvREFCNT(sv) = rc - 1;
-	else
-	    Perl_sv_free2(aTHX_ sv, rc);
-    }
-}
+# if (PERL_REVISION == 5) && (PERL_VERSION <= 30)
+// In 5.30, GIMME_V requires linking to Perl_block_gimme() instead of being
+// completely inline. Just use the deprecated GIMME for simplicity.
+#  undef GIMME_V
+#  define GIMME_V GIMME
 # endif
 
 /*
@@ -653,7 +691,7 @@ perl_runtime_link_init(char *libname, int verbose)
     if ((hPerlLib = load_dll(libname)) == NULL)
     {
 	if (verbose)
-	    EMSG2(_("E370: Could not load library %s"), libname);
+	    semsg(_("E370: Could not load library %s"), libname);
 	return FAIL;
     }
     for (i = 0; perl_funcname_table[i].ptr; ++i)
@@ -664,7 +702,7 @@ perl_runtime_link_init(char *libname, int verbose)
 	    close_dll(hPerlLib);
 	    hPerlLib = NULL;
 	    if (verbose)
-		EMSG2(_(e_loadfunc), perl_funcname_table[i].name);
+		semsg((const char *)_(e_could_not_load_library_function_str), perl_funcname_table[i].name);
 	    return FAIL;
 	}
     }
@@ -682,7 +720,7 @@ perl_enabled(int verbose)
 }
 #endif /* DYNAMIC_PERL */
 
-#if defined(PERLIO_LAYERS) && !defined(USE_SFIO)
+#if defined(PERLIO_LAYERS)
 static void vim_IOLayer_init(void);
 #endif
 
@@ -706,18 +744,13 @@ perl_init(void)
     perl_parse(perl_interp, xs_init, argc, argv, 0);
     perl_call_argv("VIM::bootstrap", (long)G_DISCARD, bootargs);
     VIM_init();
-#ifdef USE_SFIO
-    sfdisc(PerlIO_stdout(), sfdcnewvim());
-    sfdisc(PerlIO_stderr(), sfdcnewvim());
-    sfsetbuf(PerlIO_stdout(), NULL, 0);
-    sfsetbuf(PerlIO_stderr(), NULL, 0);
-#elif defined(PERLIO_LAYERS)
+#if defined(PERLIO_LAYERS)
     vim_IOLayer_init();
 #endif
 }
 
 /*
- * perl_end(): clean up after ourselves
+ * Clean up after ourselves.
  */
     void
 perl_end(void)
@@ -732,13 +765,6 @@ perl_end(void)
 	Perl_sys_term();
 #endif
     }
-#ifdef DYNAMIC_PERL
-    if (hPerlLib)
-    {
-	close_dll(hPerlLib);
-	hPerlLib = NULL;
-    }
-#endif
 }
 
 /*
@@ -756,11 +782,11 @@ msg_split(
     while ((next = strchr(token, '\n')) && !got_int)
     {
 	*next++ = '\0';			/* replace \n with \0 */
-	msg_attr((char_u *)token, attr);
+	msg_attr(token, attr);
 	token = next;
     }
     if (*token && !got_int)
-	msg_attr((char_u *)token, attr);
+	msg_attr(token, attr);
 }
 
 #ifndef FEAT_EVAL
@@ -771,8 +797,8 @@ msg_split(
     char_u *
 eval_to_string(
     char_u	*arg UNUSED,
-    char_u	**nextcmd UNUSED,
-    int		dolist UNUSED)
+    int		convert UNUSED,
+    int		use_simple_function UNUSED)
 {
     return NULL;
 }
@@ -798,8 +824,7 @@ newWINrv(SV *rv, win_T *ptr)
 	ptr->w_perl_private = newSV(0);
 	sv_setiv(ptr->w_perl_private, PTR2IV(ptr));
     }
-    else
-	SvREFCNT_inc_void_NN(ptr->w_perl_private);
+    SvREFCNT_inc_void_NN(ptr->w_perl_private);
     SvRV(rv) = ptr->w_perl_private;
     SvROK_on(rv);
     return sv_bless(rv, gv_stashpv("VIWIN", TRUE));
@@ -814,12 +839,19 @@ newBUFrv(SV *rv, buf_T *ptr)
 	ptr->b_perl_private = newSV(0);
 	sv_setiv(ptr->b_perl_private, PTR2IV(ptr));
     }
-    else
-	SvREFCNT_inc_void_NN(ptr->b_perl_private);
+    SvREFCNT_inc_void_NN(ptr->b_perl_private);
     SvRV(rv) = ptr->b_perl_private;
     SvROK_on(rv);
     return sv_bless(rv, gv_stashpv("VIBUF", TRUE));
 }
+
+#if 0
+SV *__sv_save[1024];
+int __sv_save_ix;
+#  define D_Save_Sv(sv) do { if (__sv_save_ix < 1024) __sv_save[__sv_save_ix++] = (sv); } while (0)
+#else
+#  define D_Save_Sv(sv) NOOP
+#endif
 
 /*
  * perl_win_free
@@ -828,17 +860,27 @@ newBUFrv(SV *rv, buf_T *ptr)
     void
 perl_win_free(win_T *wp)
 {
-    if (wp->w_perl_private)
-	sv_setiv((SV *)wp->w_perl_private, 0);
-    return;
+    if (wp->w_perl_private && perl_interp != NULL)
+    {
+	SV *sv = (SV*)wp->w_perl_private;
+	D_Save_Sv(sv);
+	sv_setiv(sv, 0);
+	SvREFCNT_dec(sv);
+    }
+    wp->w_perl_private = NULL;
 }
 
     void
 perl_buf_free(buf_T *bp)
 {
-    if (bp->b_perl_private)
-	sv_setiv((SV *)bp->b_perl_private, 0);
-    return;
+    if (bp->b_perl_private && perl_interp != NULL)
+    {
+	SV *sv = (SV *)bp->b_perl_private;
+	D_Save_Sv(sv);
+	sv_setiv(sv, 0);
+	SvREFCNT_dec(sv);
+    }
+    bp->b_perl_private = NULL;
 }
 
 #ifndef PROTO
@@ -861,12 +903,19 @@ I32 cur_val(IV iv, SV *sv)
 # endif
 {
     SV *rv;
+
     if (iv == 0)
 	rv = newWINrv(newSV(0), curwin);
     else
 	rv = newBUFrv(newSV(0), curbuf);
-    sv_setsv(sv, rv);
-    SvREFCNT_dec(SvRV(rv));
+
+    if (SvRV(sv) != SvRV(rv))
+	// XXX: This magic variable is a bit confusing...
+	// Is currently refcounted ?
+	sv_setsv(sv, rv);
+
+    SvREFCNT_dec(rv);
+
     return 0;
 }
 #endif /* !PROTO */
@@ -933,7 +982,7 @@ ex_perl(exarg_T *eap)
 #ifdef DYNAMIC_PERL
 	if (!perl_enabled(TRUE))
 	{
-	    EMSG(_(e_noperl));
+	    emsg(_(e_noperl));
 	    vim_free(script);
 	    return;
 	}
@@ -954,13 +1003,12 @@ ex_perl(exarg_T *eap)
 	vim_free(script);
     }
 
-#ifdef HAVE_SANDBOX
-    if (sandbox)
+    if (sandbox || secure)
     {
 	safe = perl_get_sv("VIM::safe", FALSE);
 # ifndef MAKE_TEST  /* avoid a warning for unreachable code */
 	if (safe == NULL || !SvTRUE(safe))
-	    EMSG(_("E299: Perl evaluation forbidden in sandbox without the Safe module"));
+	    emsg(_(e_perl_evaluation_forbidden_in_sandbox_without_safe_module));
 	else
 # endif
 	{
@@ -972,7 +1020,6 @@ ex_perl(exarg_T *eap)
 	}
     }
     else
-#endif
 	perl_eval_sv(sv, G_DISCARD | G_NOARGS);
 
     SvREFCNT_dec(sv);
@@ -1003,7 +1050,7 @@ replace_line(linenr_T *line, linenr_T *end)
     }
     else
     {
-	ml_delete(*line, FALSE);
+	ml_delete(*line);
 	deleted_lines_mark(*line, 1L);
 	--(*end);
 	--(*line);
@@ -1067,16 +1114,15 @@ perl_to_vim(SV *sv, typval_T *rettv)
 	case SVt_NULL:
 	    break;
 	case SVt_NV:	/* float */
-#ifdef FEAT_FLOAT
 	    rettv->v_type	= VAR_FLOAT;
 	    rettv->vval.v_float = SvNV(sv);
 	    break;
-#endif
 	case SVt_IV:	/* integer */
 	    if (!SvROK(sv)) { /* references should be string */
 		rettv->vval.v_number = SvIV(sv);
 		break;
 	    }
+	    /* FALLTHROUGH */
 	case SVt_PV:	/* string */
 	{
 	    size_t  len		= 0;
@@ -1136,9 +1182,7 @@ perl_to_vim(SV *sv, typval_T *rettv)
 		}
 	    }
 
-	    list->lv_refcount++;
-	    rettv->v_type	= VAR_LIST;
-	    rettv->vval.v_list	= list;
+	    rettv_list_set(rettv, list);
 	    break;
 	}
 	case SVt_PVHV:	/* dictionary */
@@ -1171,16 +1215,14 @@ perl_to_vim(SV *sv, typval_T *rettv)
 		    key = hv_iterkey(entry, &key_len);
 
 		    if (!key || !key_len || strlen(key) < (size_t)key_len) {
-			EMSG2("Malformed key Dictionary '%s'", key && *key ? key : "(empty)");
+			semsg("Malformed key Dictionary '%s'", key && *key ? key : "(empty)");
 			break;
 		    }
 
 		    if ((item = dictitem_alloc((char_u *)key)) == NULL)
 			break;
-
-		    item->di_tv.v_type		= VAR_NUMBER;
-		    item->di_tv.v_lock		= 0;
-		    item->di_tv.vval.v_number	= 0;
+		    item->di_tv.v_type = VAR_NUMBER;
+		    item->di_tv.vval.v_number = 0;
 
 		    if (dict_add(dict, item) == FAIL) {
 			dictitem_free(item);
@@ -1192,9 +1234,7 @@ perl_to_vim(SV *sv, typval_T *rettv)
 		}
 	    }
 
-	    dict->dv_refcount++;
-	    rettv->v_type	= VAR_DICT;
-	    rettv->vval.v_dict	= dict;
+	    rettv_dict_set(rettv, dict);
 	    break;
 	}
 	default:	/* not convertible */
@@ -1226,7 +1266,7 @@ do_perleval(char_u *str, typval_T *rettv)
 #ifdef DYNAMIC_PERL
 	if (!perl_enabled(TRUE))
 	{
-	    EMSG(_(e_noperl));
+	    emsg(_(e_noperl));
 	    return;
 	}
 #endif
@@ -1238,13 +1278,12 @@ do_perleval(char_u *str, typval_T *rettv)
 	ENTER;
 	SAVETMPS;
 
-#ifdef HAVE_SANDBOX
-	if (sandbox)
+	if (sandbox || secure)
 	{
 	    safe = get_sv("VIM::safe", FALSE);
 # ifndef MAKE_TEST  /* avoid a warning for unreachable code */
 	    if (safe == NULL || !SvTRUE(safe))
-		EMSG(_("E299: Perl evaluation forbidden in sandbox without the Safe module"));
+		emsg(_(e_perl_evaluation_forbidden_in_sandbox_without_safe_module));
 	    else
 # endif
 	    {
@@ -1257,10 +1296,10 @@ do_perleval(char_u *str, typval_T *rettv)
 		SPAGAIN;
 		SvREFCNT_dec(sv);
 		sv = POPs;
+		PUTBACK;
 	    }
 	}
 	else
-#endif /* HAVE_SANDBOX */
 	    sv = eval_pv((char *)str, 0);
 
 	if (sv) {
@@ -1268,7 +1307,6 @@ do_perleval(char_u *str, typval_T *rettv)
 	    ref_map_free();
 	    err = SvPV(GvSV(PL_errgv), err_len);
 	}
-	PUTBACK;
 	FREETMPS;
 	LEAVE;
     }
@@ -1296,7 +1334,7 @@ ex_perldo(exarg_T *eap)
 #ifdef DYNAMIC_PERL
 	if (!perl_enabled(TRUE))
 	{
-	    EMSG(_(e_noperl));
+	    emsg(_(e_noperl));
 	    return;
 	}
 #endif
@@ -1329,7 +1367,7 @@ ex_perldo(exarg_T *eap)
 	PUSHMARK(sp);
 	perl_call_pv("VIM::perldo", G_SCALAR | G_EVAL);
 	str = SvPV(GvSV(PL_errgv), length);
-	if (length || curbuf != was_curbuf)
+	if (length || curbuf != was_curbuf || i > curbuf->b_ml.ml_line_count)
 	    break;
 	SPAGAIN;
 	if (SvTRUEx(POPs))
@@ -1345,7 +1383,7 @@ ex_perldo(exarg_T *eap)
     FREETMPS;
     LEAVE;
     check_cursor();
-    update_screen(NOT_VALID);
+    update_screen(UPD_NOT_VALID);
     if (!length)
 	return;
 
@@ -1355,7 +1393,7 @@ err:
     }
 }
 
-#if defined(PERLIO_LAYERS) && !defined(USE_SFIO)
+#if defined(PERLIO_LAYERS)
 typedef struct {
     struct _PerlIO base;
     int attr;
@@ -1367,11 +1405,8 @@ PerlIOVim_pushed(pTHX_ PerlIO *f, const char *mode,
 {
     PerlIOVim *s = PerlIOSelf(f, PerlIOVim);
     s->attr = 0;
-    if (arg && SvPOK(arg)) {
-	int id = syn_name2id((char_u *)SvPV_nolen(arg));
-	if (id != 0)
-	    s->attr = syn_id2attr(id);
-    }
+    if (arg && SvPOK(arg))
+	s->attr = syn_name2attr((char_u *)SvPV_nolen(arg));
     return PerlIOBase_pushed(aTHX_ f, mode, (SV *)NULL, tab);
 }
 
@@ -1381,7 +1416,7 @@ PerlIOVim_write(pTHX_ PerlIO *f, const void *vbuf, Size_t count)
     char_u *str;
     PerlIOVim * s = PerlIOSelf(f, PerlIOVim);
 
-    str = vim_strnsave((char_u *)vbuf, (int)count);
+    str = vim_strnsave((char_u *)vbuf, count);
     if (str == NULL)
 	return 0;
     msg_split((char_u *)str, s->attr);
@@ -1429,25 +1464,74 @@ vim_IOLayer_init(void)
     (void)eval_pv(   "binmode(STDOUT, ':Vim')"
                 "  && binmode(STDERR, ':Vim(ErrorMsg)');", 0);
 }
-#endif /* PERLIO_LAYERS && !USE_SFIO */
+#endif /* PERLIO_LAYERS */
 
-#ifndef FEAT_WINDOWS
-    int
-win_valid(win_T *w)
+#ifdef DYNAMIC_PERL
+
+// Certain functionality that we use like SvREFCNT_dec are inlined for
+// performance reasons. They reference Perl APIs like Perl_sv_free2(), which
+// would cause linking errors in dynamic builds as we don't link against Perl
+// during build time. Manually fix it here by redirecting these functions
+// towards the dynamically loaded version.
+
+# if (PERL_REVISION == 5) && (PERL_VERSION >= 38)
+#  undef Perl_croak_nocontext
+void Perl_croak_nocontext(const char *pat, ...)
 {
-    return TRUE;
+    dTHX;
+    va_list args;
+    va_start(args, pat);
+    (*dll_Perl_croak_nocontext)(pat, &args);
+    NOT_REACHED; /* NOTREACHED */
+    va_end(args);
 }
-    int
-win_count(void)
+# endif
+
+# if (PERL_REVISION == 5) && (PERL_VERSION >= 18)
+#  undef Perl_sv_free2
+void Perl_sv_free2(pTHX_ SV *const sv, const U32 refcnt)
 {
-    return 1;
+    (*dll_Perl_sv_free2)(aTHX_ sv, refcnt);
 }
-    win_T *
-win_find_nr(int n)
+# else
+#  undef Perl_sv_free2
+void Perl_sv_free2(pTHX_ SV* sv)
 {
-    return curwin;
+    (*dll_Perl_sv_free2)(aTHX_ sv);
 }
-#endif
+# endif
+
+# if (PERL_REVISION == 5) && (PERL_VERSION >= 14)
+#  undef Perl_sv_2bool_flags
+bool Perl_sv_2bool_flags(pTHX_ SV* sv, I32 flags)
+{
+    return (*dll_Perl_sv_2bool_flags)(aTHX_ sv, flags);
+}
+# endif
+
+# if (PERL_REVISION == 5) && (PERL_VERSION >= 28)
+#  undef Perl_mg_get
+int Perl_mg_get(pTHX_ SV* sv)
+{
+    return (*dll_Perl_mg_get)(aTHX_ sv);
+}
+# endif
+
+# undef Perl_sv_2nv_flags
+NV Perl_sv_2nv_flags(pTHX_ SV *const sv, const I32 flags)
+{
+    return (*dll_Perl_sv_2nv_flags)(aTHX_ sv, flags);
+}
+
+# ifdef PERL589_OR_LATER
+#  undef Perl_sv_2iv_flags
+IV Perl_sv_2iv_flags(pTHX_ SV *const sv, const I32 flags)
+{
+    return (*dll_Perl_sv_2iv_flags)(aTHX_ sv, flags);
+}
+# endif
+
+#endif // DYNAMIC_PERL
 
 XS(boot_VIM);
 
@@ -1473,18 +1557,13 @@ Msg(text, hl=NULL)
 
     PREINIT:
     int		attr;
-    int		id;
 
     PPCODE:
     if (text != NULL)
     {
 	attr = 0;
 	if (hl != NULL)
-	{
-	    id = syn_name2id((char_u *)hl);
-	    if (id != 0)
-		attr = syn_id2attr(id);
-	}
+	    attr = syn_name2attr((char_u *)hl);
 	msg_split((char_u *)text, attr);
     }
 
@@ -1495,7 +1574,7 @@ SetOption(line)
     PPCODE:
     if (line != NULL)
 	do_set((char_u *)line, 0);
-    update_screen(NOT_VALID);
+    update_screen(UPD_NOT_VALID);
 
 void
 DoCommand(line)
@@ -1512,7 +1591,7 @@ Eval(str)
     PREINIT:
 	char_u *value;
     PPCODE:
-	value = eval_to_string((char_u *)str, (char_u **)0, TRUE);
+	value = eval_to_string((char_u *)str, TRUE, FALSE);
 	if (value == NULL)
 	{
 	    XPUSHs(sv_2mortal(newSViv(0)));
@@ -1525,6 +1604,27 @@ Eval(str)
 	    vim_free(value);
 	}
 
+SV*
+Blob(SV* sv)
+    PREINIT:
+    STRLEN	len;
+    char	*s;
+    unsigned	i;
+    char	buf[3];
+    SV*		newsv;
+
+    CODE:
+    s = SvPVbyte(sv, len);
+    newsv = newSVpv("0z", 2);
+    for (i = 0; i < len; i++)
+    {
+	sprintf(buf, "%02X", (unsigned char)(s[i]));
+	sv_catpvn(newsv, buf, 2);
+    }
+    RETVAL = newsv;
+    OUTPUT:
+    RETVAL
+
 void
 Buffers(...)
 
@@ -1535,7 +1635,7 @@ Buffers(...)
     PPCODE:
     if (items == 0)
     {
-	if (GIMME == G_SCALAR)
+	if (GIMME_V == G_SCALAR)
 	{
 	    i = 0;
 	    FOR_ALL_BUFFERS(vimbuf)
@@ -1546,7 +1646,7 @@ Buffers(...)
 	else
 	{
 	    FOR_ALL_BUFFERS(vimbuf)
-		XPUSHs(newBUFrv(newSV(0), vimbuf));
+		XPUSHs(sv_2mortal(newBUFrv(newSV(0), vimbuf)));
 	}
     }
     else
@@ -1563,7 +1663,7 @@ Buffers(...)
 
 		pat = (char_u *)SvPV(sv, len);
 		++emsg_off;
-		b = buflist_findpat(pat, pat+len, FALSE, FALSE, FALSE);
+		b = buflist_findpat(pat, pat + len, TRUE, FALSE, FALSE);
 		--emsg_off;
 	    }
 
@@ -1571,7 +1671,7 @@ Buffers(...)
 	    {
 		vimbuf = buflist_findnr(b);
 		if (vimbuf)
-		    XPUSHs(newBUFrv(newSV(0), vimbuf));
+		    XPUSHs(sv_2mortal(newBUFrv(newSV(0), vimbuf)));
 	    }
 	}
     }
@@ -1586,12 +1686,12 @@ Windows(...)
     PPCODE:
     if (items == 0)
     {
-	if (GIMME == G_SCALAR)
+	if (GIMME_V == G_SCALAR)
 	    XPUSHs(sv_2mortal(newSViv(win_count())));
 	else
 	{
 	    FOR_ALL_WINDOWS(vimwin)
-		XPUSHs(newWINrv(newSV(0), vimwin));
+		XPUSHs(sv_2mortal(newWINrv(newSV(0), vimwin)));
 	}
     }
     else
@@ -1601,7 +1701,7 @@ Windows(...)
 	    w = (int) SvIV(ST(i));
 	    vimwin = win_find_nr(w);
 	    if (vimwin)
-		XPUSHs(newWINrv(newSV(0), vimwin));
+		XPUSHs(sv_2mortal(newWINrv(newSV(0), vimwin)));
 	}
     }
 
@@ -1665,8 +1765,9 @@ Cursor(win, ...)
       col = (int) SvIV(ST(2));
       win->w_cursor.lnum = lnum;
       win->w_cursor.col = col;
+      win->w_set_curswant = TRUE;
       check_cursor();		    /* put cursor on an existing line */
-      update_screen(NOT_VALID);
+      update_screen(UPD_NOT_VALID);
     }
 
 MODULE = VIM	    PACKAGE = VIBUF
@@ -1754,18 +1855,21 @@ Set(vimbuf, ...)
 	    {
 		aco_save_T	aco;
 
-		/* set curwin/curbuf for "vimbuf" and save some things */
+		/* Set curwin/curbuf for "vimbuf" and save some things. */
 		aucmd_prepbuf(&aco, vimbuf);
-
-		if (u_savesub(lnum) == OK)
+		if (curbuf == vimbuf)
 		{
-		    ml_replace(lnum, (char_u *)line, TRUE);
-		    changed_bytes(lnum, 0);
-		}
+		    /* Only when a window was found. */
+		    if (u_savesub(lnum) == OK)
+		    {
+			ml_replace(lnum, (char_u *)line, TRUE);
+			changed_bytes(lnum, 0);
+		    }
 
-		/* restore curwin/curbuf and a few other things */
-		aucmd_restbuf(&aco);
-		/* Careful: autocommands may have made "vimbuf" invalid! */
+		    /* restore curwin/curbuf and a few other things */
+		    aucmd_restbuf(&aco);
+		    /* Careful: autocommands may have made "vimbuf" invalid! */
+		}
 	    }
 	}
     }
@@ -1806,19 +1910,23 @@ Delete(vimbuf, ...)
 
 		    /* set curwin/curbuf for "vimbuf" and save some things */
 		    aucmd_prepbuf(&aco, vimbuf);
-
-		    if (u_savedel(lnum, 1) == OK)
+		    if (curbuf == vimbuf)
 		    {
-			ml_delete(lnum, 0);
-			check_cursor();
-			deleted_lines_mark(lnum, 1L);
+			/* Only when a window was found. */
+			if (u_savedel(lnum, 1) == OK)
+			{
+			    ml_delete(lnum);
+			    check_cursor();
+			    deleted_lines_mark(lnum, 1L);
+			}
+
+			/* restore curwin/curbuf and a few other things */
+			aucmd_restbuf(&aco);
+			/* Careful: autocommands may have made "vimbuf"
+			 * invalid! */
 		    }
 
-		    /* restore curwin/curbuf and a few other things */
-		    aucmd_restbuf(&aco);
-		    /* Careful: autocommands may have made "vimbuf" invalid! */
-
-		    update_curbuf(VALID);
+		    update_curbuf(UPD_VALID);
 		}
 	    }
 	}
@@ -1848,18 +1956,21 @@ Append(vimbuf, ...)
 
 		/* set curwin/curbuf for "vimbuf" and save some things */
 		aucmd_prepbuf(&aco, vimbuf);
-
-		if (u_inssub(lnum + 1) == OK)
+		if (curbuf == vimbuf)
 		{
-		    ml_append(lnum, (char_u *)line, (colnr_T)0, FALSE);
-		    appended_lines_mark(lnum, 1L);
-		}
+		    /* Only when a window for "vimbuf" was found. */
+		    if (u_inssub(lnum + 1) == OK)
+		    {
+			ml_append(lnum, (char_u *)line, (colnr_T)0, FALSE);
+			appended_lines_mark(lnum, 1L);
+		    }
 
-		/* restore curwin/curbuf and a few other things */
-		aucmd_restbuf(&aco);
-		/* Careful: autocommands may have made "vimbuf" invalid! */
+		    /* restore curwin/curbuf and a few other things */
+		    aucmd_restbuf(&aco);
+		    /* Careful: autocommands may have made "vimbuf" invalid! */
+		    }
 
-		update_curbuf(VALID);
+		update_curbuf(UPD_VALID);
 	    }
 	}
     }

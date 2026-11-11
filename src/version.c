@@ -9,14 +9,11 @@
 
 #include "vim.h"
 
-#ifdef AMIGA
-# include <time.h>	/* for time() */
-#endif
-
 /*
  * Vim originated from Stevie version 3.6 (Fish disk 217) by GRWalter (Fred)
  * It has been changed beyond recognition since then.
  *
+ * Differences between version 8.2 and 9.1 can be found with ":help version9".
  * Differences between version 7.4 and 8.x can be found with ":help version8".
  * Differences between version 6.4 and 7.x can be found with ":help version7".
  * Differences between version 5.8 and 6.x can be found with ":help version6".
@@ -31,33 +28,66 @@
 char		*Version = VIM_VERSION_SHORT;
 static char	*mediumVersion = VIM_VERSION_MEDIUM;
 
-#if defined(HAVE_DATE_TIME) || defined(PROTO)
-# if (defined(VMS) && defined(VAXC)) || defined(PROTO)
+#if defined(HAVE_DATE_TIME)
+# if defined(VMS) && defined(VAXC)
 char	longVersion[sizeof(VIM_VERSION_LONG_DATE) + sizeof(__DATE__)
 						      + sizeof(__TIME__) + 3];
 
     void
-make_version(void)
+init_longVersion(void)
 {
     /*
      * Construct the long version string.  Necessary because
-     * VAX C can't catenate strings in the preprocessor.
+     * VAX C can't concatenate strings in the preprocessor.
      */
     strcpy(longVersion, VIM_VERSION_LONG_DATE);
+#  ifdef BUILD_DATE
+    strcat(longVersion, BUILD_DATE);
+#  else
     strcat(longVersion, __DATE__);
     strcat(longVersion, " ");
     strcat(longVersion, __TIME__);
+#  endif
     strcat(longVersion, ")");
 }
+
 # else
-char	*longVersion = VIM_VERSION_LONG_DATE __DATE__ " " __TIME__ ")";
+char	*longVersion = NULL;
+
+    void
+init_longVersion(void)
+{
+    if (longVersion != NULL)
+	return;
+
+#  ifdef BUILD_DATE
+    char *date_time = BUILD_DATE;
+#  else
+    char *date_time = __DATE__ " " __TIME__;
+#  endif
+    char *msg = _("%s (%s, compiled %s)");
+    size_t len = strlen(msg)
+	+ STRLEN_LITERAL(VIM_VERSION_LONG_ONLY)
+	+ STRLEN_LITERAL(VIM_VERSION_DATE_ONLY)
+	+ strlen(date_time);
+
+    longVersion = alloc(len);
+    if (longVersion == NULL)
+	longVersion = VIM_VERSION_LONG;
+    else
+	vim_snprintf(longVersion, len, msg,
+		VIM_VERSION_LONG_ONLY, VIM_VERSION_DATE_ONLY, date_time);
+}
 # endif
 #else
 char	*longVersion = VIM_VERSION_LONG;
-#endif
 
-static void list_features(void);
-static void version_msg(char *s);
+    void
+init_longVersion(void)
+{
+    // nothing to do
+}
+#endif
 
 static char *(features[]) =
 {
@@ -66,42 +96,45 @@ static char *(features[]) =
 #else
 	"-acl",
 #endif
-#ifdef AMIGA		/* only for Amiga systems */
+#ifdef FEAT_ARABIC
+	"+arabic",
+#else
+	"-arabic",
+#endif
+#ifdef AMIGA		// only for Amiga systems
 # ifdef FEAT_ARP
 	"+ARP",
 # else
 	"-ARP",
 # endif
 #endif
-#ifdef FEAT_ARABIC
-	"+arabic",
+#ifdef FEAT_AUTOCHDIR
+	"+autochdir",
 #else
-	"-arabic",
+	"-autochdir",
 #endif
-#ifdef FEAT_AUTOCMD
 	"+autocmd",
+#ifdef FEAT_AUTOSERVERNAME
+	"+autoservername",
 #else
-	"-autocmd",
+	"-autoservername",
 #endif
-#ifdef FEAT_BEVAL
+#ifdef FEAT_BEVAL_GUI
 	"+balloon_eval",
 #else
 	"-balloon_eval",
+#endif
+#ifdef FEAT_BEVAL_TERM
+	"+balloon_eval_term",
+#else
+	"-balloon_eval_term",
 #endif
 #ifdef FEAT_BROWSE
 	"+browse",
 #else
 	"-browse",
 #endif
-#ifdef NO_BUILTIN_TCAPS
-	"-builtin_terms",
-#endif
-#ifdef SOME_BUILTIN_TCAPS
-	"+builtin_terms",
-#endif
-#ifdef ALL_BUILTIN_TCAPS
 	"++builtin_terms",
-#endif
 #ifdef FEAT_BYTEOFF
 	"+byte_offset",
 #else
@@ -112,11 +145,7 @@ static char *(features[]) =
 #else
 	"-channel",
 #endif
-#ifdef FEAT_CINDENT
 	"+cindent",
-#else
-	"-cindent",
-#endif
 #ifdef FEAT_CLIENTSERVER
 	"+clientserver",
 #else
@@ -127,26 +156,15 @@ static char *(features[]) =
 #else
 	"-clipboard",
 #endif
-#ifdef FEAT_CMDL_COMPL
+#ifdef FEAT_CLIPBOARD_PROVIDER
+	"+clipboard_provider",
+#else
+	"-clipboard_provider",
+#endif
 	"+cmdline_compl",
-#else
-	"-cmdline_compl",
-#endif
-#ifdef FEAT_CMDHIST
 	"+cmdline_hist",
-#else
-	"-cmdline_hist",
-#endif
-#ifdef FEAT_CMDL_INFO
 	"+cmdline_info",
-#else
-	"-cmdline_info",
-#endif
-#ifdef FEAT_COMMENTS
 	"+comments",
-#else
-	"-comments",
-#endif
 #ifdef FEAT_CONCEAL
 	"+conceal",
 #else
@@ -162,11 +180,7 @@ static char *(features[]) =
 #else
 	"-cscope",
 #endif
-#ifdef FEAT_CURSORBIND
 	"+cursorbind",
-#else
-	"-cursorbind",
-#endif
 #ifdef CURSOR_SHAPE
 	"+cursorshape",
 #else
@@ -195,7 +209,7 @@ static char *(features[]) =
 #else
 	"-digraphs",
 #endif
-#ifdef FEAT_GUI_W32
+#ifdef FEAT_GUI_MSWIN
 # ifdef FEAT_DIRECTX
 	"+directx",
 # else
@@ -207,11 +221,7 @@ static char *(features[]) =
 #else
 	"-dnd",
 #endif
-#ifdef EBCDIC
-	"+ebcdic",
-#else
 	"-ebcdic",
-#endif
 #ifdef FEAT_EMACS_TAGS
 	"+emacs_tags",
 #else
@@ -228,37 +238,21 @@ static char *(features[]) =
 #else
 	"-extra_search",
 #endif
-#ifdef FEAT_FKMAP
-	"+farsi",
-#else
 	"-farsi",
-#endif
-#ifdef FEAT_SEARCHPATH
 	"+file_in_path",
-#else
-	"-file_in_path",
-#endif
 #ifdef FEAT_FIND_ID
 	"+find_in_path",
 #else
 	"-find_in_path",
 #endif
-#ifdef FEAT_FLOAT
 	"+float",
-#else
-	"-float",
-#endif
 #ifdef FEAT_FOLDING
 	"+folding",
 #else
 	"-folding",
 #endif
-#ifdef FEAT_FOOTER
-	"+footer",
-#else
 	"-footer",
-#endif
-	    /* only interesting on Unix systems */
+	// only interesting on Unix systems
 #if !defined(USE_SYSTEM) && defined(UNIX)
 	"+fork()",
 #endif
@@ -271,11 +265,7 @@ static char *(features[]) =
 #else
 	"-gettext",
 #endif
-#ifdef FEAT_HANGULIN
-	"+hangul_input",
-#else
 	"-hangul_input",
-#endif
 #if (defined(HAVE_ICONV_H) && defined(USE_ICONV)) || defined(DYNAMIC_ICONV)
 # ifdef DYNAMIC_ICONV
 	"+iconv/dyn",
@@ -285,21 +275,28 @@ static char *(features[]) =
 #else
 	"-iconv",
 #endif
-#ifdef FEAT_INS_EXPAND
-	"+insert_expand",
+#ifdef FEAT_IMAGE
+	"+image",
 #else
-	"-insert_expand",
+	"-image",
+#endif
+#ifdef FEAT_IMAGE_POPUP
+	"+image_popup",
+#else
+	"-image_popup",
+#endif
+	"+insert_expand",
+#ifdef FEAT_IPV6
+	"+ipv6",
+#else
+	"-ipv6",
 #endif
 #ifdef FEAT_JOB_CHANNEL
 	"+job",
 #else
 	"-job",
 #endif
-#ifdef FEAT_JUMPLIST
 	"+jumplist",
-#else
-	"-jumplist",
-#endif
 #ifdef FEAT_KEYMAP
 	"+keymap",
 #else
@@ -325,21 +322,9 @@ static char *(features[]) =
 #else
 	"-linebreak",
 #endif
-#ifdef FEAT_LISP
 	"+lispindent",
-#else
-	"-lispindent",
-#endif
-#ifdef FEAT_LISTCMDS
 	"+listcmds",
-#else
-	"-listcmds",
-#endif
-#ifdef FEAT_LOCALMAP
 	"+localmap",
-#else
-	"-localmap",
-#endif
 #ifdef FEAT_LUA
 # ifdef DYNAMIC_LUA
 	"+lua/dyn",
@@ -359,22 +344,8 @@ static char *(features[]) =
 #else
 	"-mksession",
 #endif
-#ifdef FEAT_MODIFY_FNAME
 	"+modify_fname",
-#else
-	"-modify_fname",
-#endif
-#ifdef FEAT_MOUSE
 	"+mouse",
-#  ifdef FEAT_MOUSESHAPE
-	"+mouseshape",
-#  else
-	"-mouseshape",
-#  endif
-# else
-	"-mouse",
-#endif
-
 #if defined(UNIX) || defined(VMS)
 # ifdef FEAT_MOUSE_DEC
 	"+mouse_dec",
@@ -382,7 +353,11 @@ static char *(features[]) =
 	"-mouse_dec",
 # endif
 # ifdef FEAT_MOUSE_GPM
+#  ifdef DYNAMIC_GPM
+	"+mouse_gpm/dyn",
+#  else
 	"+mouse_gpm",
+#  endif
 # else
 	"-mouse_gpm",
 # endif
@@ -407,11 +382,7 @@ static char *(features[]) =
 #endif
 
 #if defined(UNIX) || defined(VMS)
-# ifdef FEAT_MOUSE_SGR
 	"+mouse_sgr",
-# else
-	"-mouse_sgr",
-# endif
 # ifdef FEAT_SYSMOUSE
 	"+mouse_sysmouse",
 # else
@@ -422,11 +393,12 @@ static char *(features[]) =
 # else
 	"-mouse_urxvt",
 # endif
-# ifdef FEAT_MOUSE_XTERM
 	"+mouse_xterm",
-# else
-	"-mouse_xterm",
-# endif
+#endif
+#ifdef FEAT_MOUSESHAPE
+	"+mouseshape",
+#else
+	"-mouseshape",
 #endif
 
 #ifdef FEAT_MBYTE_IME
@@ -436,11 +408,7 @@ static char *(features[]) =
 	"+multi_byte_ime",
 # endif
 #else
-# ifdef FEAT_MBYTE
 	"+multi_byte",
-# else
-	"-multi_byte",
-# endif
 #endif
 #ifdef FEAT_MULTI_LANG
 	"+multi_lang",
@@ -461,24 +429,25 @@ static char *(features[]) =
 #else
 	"-netbeans_intg",
 #endif
-#ifdef FEAT_NUM64
 	"+num64",
-#else
-	"-num64",
-#endif
-#ifdef FEAT_GUI_W32
+#ifdef FEAT_GUI_MSWIN
 # ifdef FEAT_OLE
 	"+ole",
 # else
 	"-ole",
 # endif
 #endif
+#ifdef FEAT_EVAL
 	"+packages",
-#ifdef FEAT_PATH_EXTRA
-	"+path_extra",
 #else
-	"-path_extra",
+	"-packages",
 #endif
+#ifdef FEAT_PRINT_PANGO
+	"+pango",
+#else
+	"-pango",
+#endif
+	"+path_extra",
 #ifdef FEAT_PERL
 # ifdef DYNAMIC_PERL
 	"+perl/dyn",
@@ -492,6 +461,11 @@ static char *(features[]) =
 	"+persistent_undo",
 #else
 	"-persistent_undo",
+#endif
+#ifdef FEAT_PROP_POPUP
+	"+popupwin",
+#else
+	"-popupwin",
 #endif
 #ifdef FEAT_PRINTER
 # ifdef FEAT_POSTSCRIPT
@@ -519,7 +493,11 @@ static char *(features[]) =
 #endif
 #ifdef FEAT_PYTHON3
 # ifdef DYNAMIC_PYTHON3
+#  ifdef DYNAMIC_PYTHON3_STABLE_ABI
+	"+python3/dyn-stable",
+#  else
 	"+python3/dyn",
+#  endif
 # else
 	"+python3",
 # endif
@@ -550,20 +528,36 @@ static char *(features[]) =
 #else
 	"-ruby",
 #endif
-#ifdef FEAT_SCROLLBIND
 	"+scrollbind",
-#else
-	"-scrollbind",
-#endif
 #ifdef FEAT_SIGNS
 	"+signs",
 #else
 	"-signs",
 #endif
-#ifdef FEAT_SMARTINDENT
 	"+smartindent",
+#ifdef FEAT_SOCKETSERVER
+	"+socketserver",
 #else
-	"-smartindent",
+	"-socketserver",
+#endif
+#ifdef FEAT_SODIUM
+# ifdef DYNAMIC_SODIUM
+	"+sodium/dyn",
+# else
+	"+sodium",
+# endif
+#else
+	"-sodium",
+#endif
+#ifdef FEAT_SOUND
+	"+sound",
+#else
+	"-sound",
+#endif
+#ifdef FEAT_SPELL
+	"+spell",
+#else
+	"-spell",
 #endif
 #ifdef STARTUPTIME
 	"+startuptime",
@@ -575,35 +569,24 @@ static char *(features[]) =
 #else
 	"-statusline",
 #endif
-#ifdef FEAT_SUN_WORKSHOP
-	"+sun_workshop",
-#else
 	"-sun_workshop",
-#endif
 #ifdef FEAT_SYN_HL
 	"+syntax",
 #else
 	"-syntax",
 #endif
-	    /* only interesting on Unix systems */
+	    // only interesting on Unix systems
 #if defined(USE_SYSTEM) && defined(UNIX)
 	"+system()",
 #endif
-#ifdef FEAT_TAG_BINS
-	"+tag_binary",
+#if defined(FEAT_TABPANEL)
+	"+tabpanel",
 #else
-	"-tag_binary",
+	"-tabpanel",
 #endif
-#ifdef FEAT_TAG_OLDSTATIC
-	"+tag_old_static",
-#else
-	"-tag_old_static",
-#endif
-#ifdef FEAT_TAG_ANYWHITE
-	"+tag_any_white",
-#else
 	"-tag_any_white",
-#endif
+	"+tag_binary",
+	"-tag_old_static",
 #ifdef FEAT_TCL
 # ifdef DYNAMIC_TCL
 	"+tcl/dyn",
@@ -618,18 +601,17 @@ static char *(features[]) =
 #else
 	"-termguicolors",
 #endif
+#ifdef FEAT_TERMINAL
+	"+terminal",
+#else
+	"-terminal",
+#endif
 #if defined(UNIX)
-/* only Unix can have terminfo instead of termcap */
+// only Unix can have terminfo instead of termcap
 # ifdef TERMINFO
 	"+terminfo",
 # else
 	"-terminfo",
-# endif
-#else		    /* unix always includes termcap support */
-# ifdef HAVE_TGETENT
-	"+tgetent",
-# else
-	"-tgetent",
 # endif
 #endif
 #ifdef FEAT_TERMRESPONSE
@@ -637,72 +619,68 @@ static char *(features[]) =
 #else
 	"-termresponse",
 #endif
-#ifdef FEAT_TEXTOBJ
 	"+textobjects",
+#ifdef FEAT_PROP_POPUP
+	"+textprop",
 #else
-	"-textobjects",
+	"-textprop",
+#endif
+#if !defined(UNIX)
+// unix always includes termcap support
+# ifdef HAVE_TGETENT
+	"+tgetent",
+# else
+	"-tgetent",
+# endif
 #endif
 #ifdef FEAT_TIMERS
 	"+timers",
 #else
 	"-timers",
 #endif
-#ifdef FEAT_TITLE
 	"+title",
-#else
-	"-title",
-#endif
 #ifdef FEAT_TOOLBAR
 	"+toolbar",
 #else
 	"-toolbar",
 #endif
-#ifdef FEAT_USR_CMDS
 	"+user_commands",
+#ifdef FEAT_VARTABS
+	"+vartabs",
 #else
-	"-user_commands",
+	"-vartabs",
 #endif
-#ifdef FEAT_WINDOWS
 	"+vertsplit",
-#else
-	"-vertsplit",
-#endif
-#ifdef FEAT_VIRTUALEDIT
-	"+virtualedit",
-#else
-	"-virtualedit",
-#endif
-	"+visual",
-#ifdef FEAT_VISUALEXTRA
-	"+visualextra",
-#else
-	"-visualextra",
-#endif
+	"+vim9script",
 #ifdef FEAT_VIMINFO
 	"+viminfo",
 #else
 	"-viminfo",
 #endif
-#ifdef FEAT_VREPLACE
+	"+virtualedit",
+	"+visual",
+	"+visualextra",
 	"+vreplace",
-#else
-	"-vreplace",
+#ifdef MSWIN
+# ifdef FEAT_VTP
+	"+vtp",
+# else
+	"-vtp",
+# endif
 #endif
-#ifdef FEAT_WILDIGN
+#ifdef FEAT_WAYLAND
+	"+wayland",
+#else
+	"-wayland",
+#endif
+#ifdef FEAT_WAYLAND_CLIPBOARD
+	"+wayland_clipboard",
+#else
+	"-wayland_clipboard",
+#endif
 	"+wildignore",
-#else
-	"-wildignore",
-#endif
-#ifdef FEAT_WILDMENU
 	"+wildmenu",
-#else
-	"-wildmenu",
-#endif
-#ifdef FEAT_WINDOWS
 	"+windows",
-#else
-	"-windows",
-#endif
 #ifdef FEAT_WRITEBACKUP
 	"+writebackup",
 #else
@@ -715,6 +693,11 @@ static char *(features[]) =
 	"-X11",
 # endif
 #endif
+#ifdef FEAT_XATTR
+	"+xattr",
+#else
+	"-xattr",
+#endif
 #ifdef FEAT_XFONTSET
 	"+xfontset",
 #else
@@ -725,28 +708,24 @@ static char *(features[]) =
 #else
 	"-xim",
 #endif
-#ifdef WIN3264
+#if defined(MSWIN)
 # ifdef FEAT_XPM_W32
 	"+xpm_w32",
 # else
 	"-xpm_w32",
 # endif
-#else
-# ifdef HAVE_XPM
+#elif defined(HAVE_XPM)
 	"+xpm",
-# else
+#else
 	"-xpm",
-# endif
 #endif
 #if defined(UNIX) || defined(VMS)
-# ifdef USE_XSMP_INTERACT
+# if defined(USE_XSMP_INTERACT)
 	"+xsmp_interact",
-# else
-#  ifdef USE_XSMP
+# elif defined(USE_XSMP)
 	"+xsmp",
-#  else
+# else
 	"-xsmp",
-#  endif
 # endif
 # ifdef FEAT_XCLIPBOARD
 	"+xterm_clipboard",
@@ -764,6 +743,1502 @@ static char *(features[]) =
 
 static int included_patches[] =
 {   /* Add new patch number below this line */
+/**/
+    1330,
+/**/
+    1329,
+/**/
+    1328,
+/**/
+    1327,
+/**/
+    1326,
+/**/
+    1325,
+/**/
+    1324,
+/**/
+    1323,
+/**/
+    1322,
+/**/
+    1321,
+/**/
+    1320,
+/**/
+    1319,
+/**/
+    1318,
+/**/
+    1317,
+/**/
+    1316,
+/**/
+    1315,
+/**/
+    1314,
+/**/
+    1313,
+/**/
+    1312,
+/**/
+    1311,
+/**/
+    1310,
+/**/
+    1309,
+/**/
+    1308,
+/**/
+    1307,
+/**/
+    1306,
+/**/
+    1305,
+/**/
+    1304,
+/**/
+    1303,
+/**/
+    1302,
+/**/
+    1301,
+/**/
+    1300,
+/**/
+    1299,
+/**/
+    1298,
+/**/
+    1297,
+/**/
+    1296,
+/**/
+    1295,
+/**/
+    1294,
+/**/
+    1293,
+/**/
+    1292,
+/**/
+    1291,
+/**/
+    1290,
+/**/
+    1289,
+/**/
+    1288,
+/**/
+    1287,
+/**/
+    1286,
+/**/
+    1285,
+/**/
+    1284,
+/**/
+    1283,
+/**/
+    1282,
+/**/
+    1281,
+/**/
+    1280,
+/**/
+    1279,
+/**/
+    1278,
+/**/
+    1277,
+/**/
+    1276,
+/**/
+    1275,
+/**/
+    1274,
+/**/
+    1273,
+/**/
+    1272,
+/**/
+    1271,
+/**/
+    1270,
+/**/
+    1269,
+/**/
+    1268,
+/**/
+    1267,
+/**/
+    1266,
+/**/
+    1265,
+/**/
+    1264,
+/**/
+    1263,
+/**/
+    1262,
+/**/
+    1261,
+/**/
+    1260,
+/**/
+    1259,
+/**/
+    1258,
+/**/
+    1257,
+/**/
+    1256,
+/**/
+    1255,
+/**/
+    1254,
+/**/
+    1253,
+/**/
+    1252,
+/**/
+    1251,
+/**/
+    1250,
+/**/
+    1249,
+/**/
+    1248,
+/**/
+    1247,
+/**/
+    1246,
+/**/
+    1245,
+/**/
+    1244,
+/**/
+    1243,
+/**/
+    1242,
+/**/
+    1241,
+/**/
+    1240,
+/**/
+    1239,
+/**/
+    1238,
+/**/
+    1237,
+/**/
+    1236,
+/**/
+    1235,
+/**/
+    1234,
+/**/
+    1233,
+/**/
+    1232,
+/**/
+    1231,
+/**/
+    1230,
+/**/
+    1229,
+/**/
+    1228,
+/**/
+    1227,
+/**/
+    1226,
+/**/
+    1225,
+/**/
+    1224,
+/**/
+    1223,
+/**/
+    1222,
+/**/
+    1221,
+/**/
+    1220,
+/**/
+    1219,
+/**/
+    1218,
+/**/
+    1217,
+/**/
+    1216,
+/**/
+    1215,
+/**/
+    1214,
+/**/
+    1213,
+/**/
+    1212,
+/**/
+    1211,
+/**/
+    1210,
+/**/
+    1209,
+/**/
+    1208,
+/**/
+    1207,
+/**/
+    1206,
+/**/
+    1205,
+/**/
+    1204,
+/**/
+    1203,
+/**/
+    1202,
+/**/
+    1201,
+/**/
+    1200,
+/**/
+    1199,
+/**/
+    1198,
+/**/
+    1197,
+/**/
+    1196,
+/**/
+    1195,
+/**/
+    1194,
+/**/
+    1193,
+/**/
+    1192,
+/**/
+    1191,
+/**/
+    1190,
+/**/
+    1189,
+/**/
+    1188,
+/**/
+    1187,
+/**/
+    1186,
+/**/
+    1185,
+/**/
+    1184,
+/**/
+    1183,
+/**/
+    1182,
+/**/
+    1181,
+/**/
+    1180,
+/**/
+    1179,
+/**/
+    1178,
+/**/
+    1177,
+/**/
+    1176,
+/**/
+    1175,
+/**/
+    1174,
+/**/
+    1173,
+/**/
+    1172,
+/**/
+    1171,
+/**/
+    1170,
+/**/
+    1169,
+/**/
+    1168,
+/**/
+    1167,
+/**/
+    1166,
+/**/
+    1165,
+/**/
+    1164,
+/**/
+    1163,
+/**/
+    1162,
+/**/
+    1161,
+/**/
+    1160,
+/**/
+    1159,
+/**/
+    1158,
+/**/
+    1157,
+/**/
+    1156,
+/**/
+    1155,
+/**/
+    1154,
+/**/
+    1153,
+/**/
+    1152,
+/**/
+    1151,
+/**/
+    1150,
+/**/
+    1149,
+/**/
+    1148,
+/**/
+    1147,
+/**/
+    1146,
+/**/
+    1145,
+/**/
+    1144,
+/**/
+    1143,
+/**/
+    1142,
+/**/
+    1141,
+/**/
+    1140,
+/**/
+    1139,
+/**/
+    1138,
+/**/
+    1137,
+/**/
+    1136,
+/**/
+    1135,
+/**/
+    1134,
+/**/
+    1133,
+/**/
+    1132,
+/**/
+    1131,
+/**/
+    1130,
+/**/
+    1129,
+/**/
+    1128,
+/**/
+    1127,
+/**/
+    1126,
+/**/
+    1125,
+/**/
+    1124,
+/**/
+    1123,
+/**/
+    1122,
+/**/
+    1121,
+/**/
+    1120,
+/**/
+    1119,
+/**/
+    1118,
+/**/
+    1117,
+/**/
+    1116,
+/**/
+    1115,
+/**/
+    1114,
+/**/
+    1113,
+/**/
+    1112,
+/**/
+    1111,
+/**/
+    1110,
+/**/
+    1109,
+/**/
+    1108,
+/**/
+    1107,
+/**/
+    1106,
+/**/
+    1105,
+/**/
+    1104,
+/**/
+    1103,
+/**/
+    1102,
+/**/
+    1101,
+/**/
+    1100,
+/**/
+    1099,
+/**/
+    1098,
+/**/
+    1097,
+/**/
+    1096,
+/**/
+    1095,
+/**/
+    1094,
+/**/
+    1093,
+/**/
+    1092,
+/**/
+    1091,
+/**/
+    1090,
+/**/
+    1089,
+/**/
+    1088,
+/**/
+    1087,
+/**/
+    1086,
+/**/
+    1085,
+/**/
+    1084,
+/**/
+    1083,
+/**/
+    1082,
+/**/
+    1081,
+/**/
+    1080,
+/**/
+    1079,
+/**/
+    1078,
+/**/
+    1077,
+/**/
+    1076,
+/**/
+    1075,
+/**/
+    1074,
+/**/
+    1073,
+/**/
+    1072,
+/**/
+    1071,
+/**/
+    1070,
+/**/
+    1069,
+/**/
+    1068,
+/**/
+    1067,
+/**/
+    1066,
+/**/
+    1065,
+/**/
+    1064,
+/**/
+    1063,
+/**/
+    1062,
+/**/
+    1061,
+/**/
+    1060,
+/**/
+    1059,
+/**/
+    1058,
+/**/
+    1057,
+/**/
+    1056,
+/**/
+    1055,
+/**/
+    1054,
+/**/
+    1053,
+/**/
+    1052,
+/**/
+    1051,
+/**/
+    1050,
+/**/
+    1049,
+/**/
+    1048,
+/**/
+    1047,
+/**/
+    1046,
+/**/
+    1045,
+/**/
+    1044,
+/**/
+    1043,
+/**/
+    1042,
+/**/
+    1041,
+/**/
+    1040,
+/**/
+    1039,
+/**/
+    1038,
+/**/
+    1037,
+/**/
+    1036,
+/**/
+    1035,
+/**/
+    1034,
+/**/
+    1033,
+/**/
+    1032,
+/**/
+    1031,
+/**/
+    1030,
+/**/
+    1029,
+/**/
+    1028,
+/**/
+    1027,
+/**/
+    1026,
+/**/
+    1025,
+/**/
+    1024,
+/**/
+    1023,
+/**/
+    1022,
+/**/
+    1021,
+/**/
+    1020,
+/**/
+    1019,
+/**/
+    1018,
+/**/
+    1017,
+/**/
+    1016,
+/**/
+    1015,
+/**/
+    1014,
+/**/
+    1013,
+/**/
+    1012,
+/**/
+    1011,
+/**/
+    1010,
+/**/
+    1009,
+/**/
+    1008,
+/**/
+    1007,
+/**/
+    1006,
+/**/
+    1005,
+/**/
+    1004,
+/**/
+    1003,
+/**/
+    1002,
+/**/
+    1001,
+/**/
+    1000,
+/**/
+    999,
+/**/
+    998,
+/**/
+    997,
+/**/
+    996,
+/**/
+    995,
+/**/
+    994,
+/**/
+    993,
+/**/
+    992,
+/**/
+    991,
+/**/
+    990,
+/**/
+    989,
+/**/
+    988,
+/**/
+    987,
+/**/
+    986,
+/**/
+    985,
+/**/
+    984,
+/**/
+    983,
+/**/
+    982,
+/**/
+    981,
+/**/
+    980,
+/**/
+    979,
+/**/
+    978,
+/**/
+    977,
+/**/
+    976,
+/**/
+    975,
+/**/
+    974,
+/**/
+    973,
+/**/
+    972,
+/**/
+    971,
+/**/
+    970,
+/**/
+    969,
+/**/
+    968,
+/**/
+    967,
+/**/
+    966,
+/**/
+    965,
+/**/
+    964,
+/**/
+    963,
+/**/
+    962,
+/**/
+    961,
+/**/
+    960,
+/**/
+    959,
+/**/
+    958,
+/**/
+    957,
+/**/
+    956,
+/**/
+    955,
+/**/
+    954,
+/**/
+    953,
+/**/
+    952,
+/**/
+    951,
+/**/
+    950,
+/**/
+    949,
+/**/
+    948,
+/**/
+    947,
+/**/
+    946,
+/**/
+    945,
+/**/
+    944,
+/**/
+    943,
+/**/
+    942,
+/**/
+    941,
+/**/
+    940,
+/**/
+    939,
+/**/
+    938,
+/**/
+    937,
+/**/
+    936,
+/**/
+    935,
+/**/
+    934,
+/**/
+    933,
+/**/
+    932,
+/**/
+    931,
+/**/
+    930,
+/**/
+    929,
+/**/
+    928,
+/**/
+    927,
+/**/
+    926,
+/**/
+    925,
+/**/
+    924,
+/**/
+    923,
+/**/
+    922,
+/**/
+    921,
+/**/
+    920,
+/**/
+    919,
+/**/
+    918,
+/**/
+    917,
+/**/
+    916,
+/**/
+    915,
+/**/
+    914,
+/**/
+    913,
+/**/
+    912,
+/**/
+    911,
+/**/
+    910,
+/**/
+    909,
+/**/
+    908,
+/**/
+    907,
+/**/
+    906,
+/**/
+    905,
+/**/
+    904,
+/**/
+    903,
+/**/
+    902,
+/**/
+    901,
+/**/
+    900,
+/**/
+    899,
+/**/
+    898,
+/**/
+    897,
+/**/
+    896,
+/**/
+    895,
+/**/
+    894,
+/**/
+    893,
+/**/
+    892,
+/**/
+    891,
+/**/
+    890,
+/**/
+    889,
+/**/
+    888,
+/**/
+    887,
+/**/
+    886,
+/**/
+    885,
+/**/
+    884,
+/**/
+    883,
+/**/
+    882,
+/**/
+    881,
+/**/
+    880,
+/**/
+    879,
+/**/
+    878,
+/**/
+    877,
+/**/
+    876,
+/**/
+    875,
+/**/
+    874,
+/**/
+    873,
+/**/
+    872,
+/**/
+    871,
+/**/
+    870,
+/**/
+    869,
+/**/
+    868,
+/**/
+    867,
+/**/
+    866,
+/**/
+    865,
+/**/
+    864,
+/**/
+    863,
+/**/
+    862,
+/**/
+    861,
+/**/
+    860,
+/**/
+    859,
+/**/
+    858,
+/**/
+    857,
+/**/
+    856,
+/**/
+    855,
+/**/
+    854,
+/**/
+    853,
+/**/
+    852,
+/**/
+    851,
+/**/
+    850,
+/**/
+    849,
+/**/
+    848,
+/**/
+    847,
+/**/
+    846,
+/**/
+    845,
+/**/
+    844,
+/**/
+    843,
+/**/
+    842,
+/**/
+    841,
+/**/
+    840,
+/**/
+    839,
+/**/
+    838,
+/**/
+    837,
+/**/
+    836,
+/**/
+    835,
+/**/
+    834,
+/**/
+    833,
+/**/
+    832,
+/**/
+    831,
+/**/
+    830,
+/**/
+    829,
+/**/
+    828,
+/**/
+    827,
+/**/
+    826,
+/**/
+    825,
+/**/
+    824,
+/**/
+    823,
+/**/
+    822,
+/**/
+    821,
+/**/
+    820,
+/**/
+    819,
+/**/
+    818,
+/**/
+    817,
+/**/
+    816,
+/**/
+    815,
+/**/
+    814,
+/**/
+    813,
+/**/
+    812,
+/**/
+    811,
+/**/
+    810,
+/**/
+    809,
+/**/
+    808,
+/**/
+    807,
+/**/
+    806,
+/**/
+    805,
+/**/
+    804,
+/**/
+    803,
+/**/
+    802,
+/**/
+    801,
+/**/
+    800,
+/**/
+    799,
+/**/
+    798,
+/**/
+    797,
+/**/
+    796,
+/**/
+    795,
+/**/
+    794,
+/**/
+    793,
+/**/
+    792,
+/**/
+    791,
+/**/
+    790,
+/**/
+    789,
+/**/
+    788,
+/**/
+    787,
+/**/
+    786,
+/**/
+    785,
+/**/
+    784,
+/**/
+    783,
+/**/
+    782,
+/**/
+    781,
+/**/
+    780,
+/**/
+    779,
+/**/
+    778,
+/**/
+    777,
+/**/
+    776,
+/**/
+    775,
+/**/
+    774,
+/**/
+    773,
+/**/
+    772,
+/**/
+    771,
+/**/
+    770,
+/**/
+    769,
+/**/
+    768,
+/**/
+    767,
+/**/
+    766,
+/**/
+    765,
+/**/
+    764,
+/**/
+    763,
+/**/
+    762,
+/**/
+    761,
+/**/
+    760,
+/**/
+    759,
+/**/
+    758,
+/**/
+    757,
+/**/
+    756,
+/**/
+    755,
+/**/
+    754,
+/**/
+    753,
+/**/
+    752,
+/**/
+    751,
+/**/
+    750,
+/**/
+    749,
+/**/
+    748,
+/**/
+    747,
+/**/
+    746,
+/**/
+    745,
+/**/
+    744,
+/**/
+    743,
+/**/
+    742,
+/**/
+    741,
+/**/
+    740,
+/**/
+    739,
+/**/
+    738,
+/**/
+    737,
+/**/
+    736,
+/**/
+    735,
+/**/
+    734,
+/**/
+    733,
+/**/
+    732,
+/**/
+    731,
+/**/
+    730,
+/**/
+    729,
+/**/
+    728,
+/**/
+    727,
+/**/
+    726,
+/**/
+    725,
+/**/
+    724,
+/**/
+    723,
+/**/
+    722,
+/**/
+    721,
+/**/
+    720,
+/**/
+    719,
+/**/
+    718,
+/**/
+    717,
+/**/
+    716,
+/**/
+    715,
+/**/
+    714,
+/**/
+    713,
+/**/
+    712,
+/**/
+    711,
+/**/
+    710,
+/**/
+    709,
+/**/
+    708,
+/**/
+    707,
+/**/
+    706,
+/**/
+    705,
+/**/
+    704,
+/**/
+    703,
+/**/
+    702,
+/**/
+    701,
+/**/
+    700,
+/**/
+    699,
+/**/
+    698,
+/**/
+    697,
+/**/
+    696,
+/**/
+    695,
+/**/
+    694,
+/**/
+    693,
+/**/
+    692,
+/**/
+    691,
+/**/
+    690,
+/**/
+    689,
+/**/
+    688,
+/**/
+    687,
+/**/
+    686,
+/**/
+    685,
+/**/
+    684,
+/**/
+    683,
+/**/
+    682,
+/**/
+    681,
+/**/
+    680,
+/**/
+    679,
+/**/
+    678,
+/**/
+    677,
+/**/
+    676,
+/**/
+    675,
+/**/
+    674,
+/**/
+    673,
+/**/
+    672,
+/**/
+    671,
+/**/
+    670,
+/**/
+    669,
+/**/
+    668,
+/**/
+    667,
+/**/
+    666,
+/**/
+    665,
+/**/
+    664,
+/**/
+    663,
+/**/
+    662,
+/**/
+    661,
+/**/
+    660,
+/**/
+    659,
+/**/
+    658,
+/**/
+    657,
+/**/
+    656,
+/**/
+    655,
+/**/
+    654,
+/**/
+    653,
+/**/
+    652,
+/**/
+    651,
+/**/
+    650,
+/**/
+    649,
+/**/
+    648,
+/**/
+    647,
+/**/
+    646,
+/**/
+    645,
+/**/
+    644,
+/**/
+    643,
+/**/
+    642,
+/**/
+    641,
+/**/
+    640,
+/**/
+    639,
+/**/
+    638,
+/**/
+    637,
+/**/
+    636,
+/**/
+    635,
+/**/
+    634,
+/**/
+    633,
+/**/
+    632,
+/**/
+    631,
+/**/
+    630,
+/**/
+    629,
+/**/
+    628,
+/**/
+    627,
+/**/
+    626,
+/**/
+    625,
+/**/
+    624,
+/**/
+    623,
+/**/
+    622,
+/**/
+    621,
+/**/
+    620,
+/**/
+    619,
+/**/
+    618,
+/**/
+    617,
+/**/
+    616,
+/**/
+    615,
+/**/
+    614,
+/**/
+    613,
+/**/
+    612,
+/**/
+    611,
+/**/
+    610,
+/**/
+    609,
+/**/
+    608,
+/**/
+    607,
+/**/
+    606,
+/**/
+    605,
+/**/
+    604,
+/**/
+    603,
+/**/
+    602,
+/**/
+    601,
+/**/
+    600,
+/**/
+    599,
+/**/
+    598,
+/**/
+    597,
+/**/
+    596,
+/**/
+    595,
+/**/
+    594,
+/**/
+    593,
+/**/
+    592,
+/**/
+    591,
+/**/
+    590,
+/**/
+    589,
+/**/
+    588,
+/**/
+    587,
+/**/
+    586,
+/**/
+    585,
+/**/
+    584,
+/**/
+    583,
 /**/
     582,
 /**/
@@ -1948,27 +3423,34 @@ static char *(extra_patches[]) =
     int
 highest_patch(void)
 {
-    int		i;
-    int		h = 0;
-
-    for (i = 0; included_patches[i] != 0; ++i)
-	if (included_patches[i] > h)
-	    h = included_patches[i];
-    return h;
+    // this relies on the highest patch number to be the first entry
+    return included_patches[0];
 }
 
-#if defined(FEAT_EVAL) || defined(PROTO)
+#if defined(FEAT_EVAL)
 /*
  * Return TRUE if patch "n" has been included.
  */
     int
 has_patch(int n)
 {
-    int		i;
+    int		h, m, l;
 
-    for (i = 0; included_patches[i] != 0; ++i)
-	if (included_patches[i] == n)
+    // Perform a binary search.
+    l = 0;
+    h = (int)ARRAY_LENGTH(included_patches) - 1;
+    for (;;)
+    {
+	m = (l + h) / 2;
+	if (included_patches[m] == n)
 	    return TRUE;
+	if (l == h)
+	    break;
+	if (included_patches[m] < n)
+	    h = m;
+	else
+	    l = m + 1;
+    }
     return FALSE;
 }
 #endif
@@ -1987,60 +3469,114 @@ ex_version(exarg_T *eap)
 }
 
 /*
+ * Output a string for the version message.  If it's going to wrap, output a
+ * newline, unless the message is too long to fit on the screen anyway.
+ * When "wrap" is TRUE wrap the string in [].
+ */
+    static void
+version_msg_wrap(char_u *s, int wrap)
+{
+    int		len = vim_strsize(s) + (wrap ? 2 : 0);
+
+    if (!got_int && len < cmdline_width && msg_col + len >= cmdline_width
+								&& *s != '\n')
+	msg_putchar('\n');
+    if (!got_int)
+    {
+	if (wrap)
+	    msg_puts("[");
+	msg_puts((char *)s);
+	if (wrap)
+	    msg_puts("]");
+    }
+}
+
+    static void
+version_msg(char *s)
+{
+    version_msg_wrap((char_u *)s, FALSE);
+}
+
+/*
  * List all features aligned in columns, dictionary style.
  */
     static void
 list_features(void)
 {
+    list_in_columns((char_u **)features, -1, -1);
+}
+
+/*
+ * List string items nicely aligned in columns.
+ * When "size" is < 0 then the last entry is marked with NULL.
+ * The entry with index "current" is inclosed in [].
+ */
+    void
+list_in_columns(char_u **items, int size, int current)
+{
     int		i;
     int		ncol;
     int		nrow;
-    int		nfeat = 0;
+    int		cur_row = 1;
+    int		item_count = 0;
     int		width = 0;
+#ifdef FEAT_SYN_HL
+    int		use_highlight = (items == (char_u **)features);
+#endif
 
-    /* Find the length of the longest feature name, use that + 1 as the column
-     * width */
-    for (i = 0; features[i] != NULL; ++i)
+    // Find the length of the longest item, use that + 1 as the column
+    // width.
+    for (i = 0; size < 0 ? items[i] != NULL : i < size; ++i)
     {
-	int l = (int)STRLEN(features[i]);
+	int l = vim_strsize(items[i]) + (i == current ? 2 : 0);
 
 	if (l > width)
 	    width = l;
-	++nfeat;
+	++item_count;
     }
     width += 1;
 
-    if (Columns < width)
+    if (cmdline_width < width)
     {
-	/* Not enough screen columns - show one per line */
-	for (i = 0; features[i] != NULL; ++i)
+	// Not enough screen columns - show one per line
+	for (i = 0; i < item_count; ++i)
 	{
-	    version_msg(features[i]);
-	    if (msg_col > 0)
+	    version_msg_wrap(items[i], i == current);
+	    if (msg_col > 0 && i < item_count - 1)
 		msg_putchar('\n');
 	}
 	return;
     }
 
-    /* The rightmost column doesn't need a separator.
-     * Sacrifice it to fit in one more column if possible. */
-    ncol = (int) (Columns + 1) / width;
-    nrow = nfeat / ncol + (nfeat % ncol ? 1 : 0);
+    // The rightmost column doesn't need a separator.
+    // Sacrifice it to fit in one more column if possible.
+    ncol = (cmdline_width + 1) / width;
+    nrow = item_count / ncol + ((item_count % ncol) ? 1 : 0);
 
-    /* i counts columns then rows.  idx counts rows then columns. */
+    // "i" counts columns then rows.  "idx" counts rows then columns.
     for (i = 0; !got_int && i < nrow * ncol; ++i)
     {
 	int idx = (i / ncol) + (i % ncol) * nrow;
 
-	if (idx < nfeat)
+	if (idx < item_count)
 	{
 	    int last_col = (i + 1) % ncol == 0;
 
-	    msg_puts((char_u *)features[idx]);
+	    if (idx == current)
+		msg_putchar('[');
+#ifdef FEAT_SYN_HL
+	    if (use_highlight && items[idx][0] == '-')
+		msg_puts_attr((char *)items[idx], HL_ATTR(HLF_W));
+	    else
+#endif
+		msg_puts((char *)items[idx]);
+	    if (idx == current)
+		msg_putchar(']');
 	    if (last_col)
 	    {
-		if (msg_col > 0)
+		if (msg_col > 0 && cur_row < nrow)
 		    msg_putchar('\n');
+		++cur_row;
 	    }
 	    else
 	    {
@@ -2050,8 +3586,13 @@ list_features(void)
 	}
 	else
 	{
+	    // this row is out of items, thus at the end of the row
 	    if (msg_col > 0)
-		msg_putchar('\n');
+	    {
+		if (cur_row < nrow)
+		    msg_putchar('\n');
+		++cur_row;
+	    }
 	}
     }
 }
@@ -2067,70 +3608,96 @@ list_version(void)
      * When adding features here, don't forget to update the list of
      * internal variables in eval.c!
      */
-    MSG(longVersion);
-#ifdef WIN3264
-# ifdef FEAT_GUI_W32
-#  ifdef _WIN64
-    MSG_PUTS(_("\nMS-Windows 64-bit GUI version"));
+    init_longVersion();
+    msg(longVersion);
+#ifdef MSWIN
+# ifdef FEAT_GUI_MSWIN
+#  ifdef VIMDLL
+#   ifdef _WIN64
+#    if defined(_M_ARM64) || defined(_M_ARM64EC)
+     msg_puts(_("\nMS-Windows ARM64 GUI/console version"));
+#    else
+     msg_puts(_("\nMS-Windows 64-bit GUI/console version"));
+#    endif
+#   else
+    msg_puts(_("\nMS-Windows 32-bit GUI/console version"));
+#   endif
 #  else
-    MSG_PUTS(_("\nMS-Windows 32-bit GUI version"));
+#   ifdef _WIN64
+#    if defined(_M_ARM64) || defined(_M_ARM64EC)
+     msg_puts(_("\nMS-Windows ARM64 GUI version"));
+#    else
+     msg_puts(_("\nMS-Windows 64-bit GUI version"));
+#    endif
+#   else
+    msg_puts(_("\nMS-Windows 32-bit GUI version"));
+#   endif
 #  endif
-# ifdef FEAT_OLE
-    MSG_PUTS(_(" with OLE support"));
-# endif
+#  ifdef FEAT_OLE
+    msg_puts(_(" with OLE support"));
+#  endif
 # else
 #  ifdef _WIN64
-    MSG_PUTS(_("\nMS-Windows 64-bit console version"));
+#   if defined(_M_ARM64) || defined(_M_ARM64EC)
+    msg_puts(_("\nMS-Windows ARM64 console version"));
+#   else
+    msg_puts(_("\nMS-Windows 64-bit console version"));
+#   endif
 #  else
-    MSG_PUTS(_("\nMS-Windows 32-bit console version"));
+    msg_puts(_("\nMS-Windows 32-bit console version"));
 #  endif
 # endif
 #endif
-#ifdef MACOS
-# ifdef MACOS_X
-#  ifdef MACOS_X_UNIX
-    MSG_PUTS(_("\nMacOS X (unix) version"));
-#  else
-    MSG_PUTS(_("\nMacOS X version"));
-#  endif
-#else
-    MSG_PUTS(_("\nMacOS version"));
+#if defined(MACOS_X)
+# if defined(MACOS_X_DARWIN)
+    msg_puts(_("\nmacOS version"));
+# else
+    msg_puts(_("\nmacOS version w/o darwin feat."));
+# endif
+# if defined(__arm64__)
+    msg_puts(" - arm64");
+# elif defined(__x86_64__)
+    msg_puts(" - x86_64");
 # endif
 #endif
 
 #ifdef VMS
-    MSG_PUTS(_("\nOpenVMS version"));
+    msg_puts(_("\nOpenVMS (build) arch, version"));
 # ifdef HAVE_PATHDEF
     if (*compiled_arch != NUL)
     {
-	MSG_PUTS(" - ");
-	MSG_PUTS(compiled_arch);
+	msg_puts(": ");
+	msg_puts((char *)compiled_arch);
+	if (*compiled_vers != NUL)
+	{
+	    msg_puts(", ");
+	    msg_puts((char *)compiled_vers);
+	}
     }
+
 # endif
 
 #endif
 
-    /* Print the list of patch numbers if there is at least one. */
-    /* Print a range when patches are consecutive: "1-10, 12, 15-40, 42-45" */
+    // Print the list of patch numbers if there is at least one.
+    // Print a range when patches are consecutive: "1-10, 12, 15-40, 42-45"
     if (included_patches[0] != 0)
     {
-	MSG_PUTS(_("\nIncluded patches: "));
+	msg_puts(_("\nIncluded patches: "));
 	first = -1;
-	/* find last one */
-	for (i = 0; included_patches[i] != 0; ++i)
-	    ;
+	i = (int)ARRAY_LENGTH(included_patches) - 1;
 	while (--i >= 0)
 	{
 	    if (first < 0)
 		first = included_patches[i];
 	    if (i == 0 || included_patches[i - 1] != included_patches[i] + 1)
 	    {
-		MSG_PUTS(s);
+		msg_puts(s);
 		s = ", ";
 		msg_outnum((long)first);
 		if (first != included_patches[i])
 		{
-		    MSG_PUTS("-");
+		    msg_puts("-");
 		    msg_outnum((long)included_patches[i]);
 		}
 		first = -1;
@@ -2138,109 +3705,75 @@ list_version(void)
 	}
     }
 
-    /* Print the list of extra patch descriptions if there is at least one. */
+    // Print the list of extra patch descriptions if there is at least one.
     if (extra_patches[0] != NULL)
     {
-	MSG_PUTS(_("\nExtra patches: "));
+	msg_puts(_("\nExtra patches: "));
 	s = "";
 	for (i = 0; extra_patches[i] != NULL; ++i)
 	{
-	    MSG_PUTS(s);
+	    msg_puts(s);
 	    s = ", ";
-	    MSG_PUTS(extra_patches[i]);
+	    msg_puts(extra_patches[i]);
 	}
     }
 
 #ifdef MODIFIED_BY
-    MSG_PUTS("\n");
-    MSG_PUTS(_("Modified by "));
-    MSG_PUTS(MODIFIED_BY);
+    msg_puts("\n");
+    msg_puts(_("Modified by "));
+    msg_puts(MODIFIED_BY);
 #endif
 
 #ifdef HAVE_PATHDEF
     if (*compiled_user != NUL || *compiled_sys != NUL)
     {
-	MSG_PUTS(_("\nCompiled "));
+	msg_puts(_("\nCompiled "));
 	if (*compiled_user != NUL)
 	{
-	    MSG_PUTS(_("by "));
-	    MSG_PUTS(compiled_user);
+	    msg_puts(_("by "));
+	    msg_puts((char *)compiled_user);
 	}
 	if (*compiled_sys != NUL)
 	{
-	    MSG_PUTS("@");
-	    MSG_PUTS(compiled_sys);
+	    msg_puts("@");
+	    msg_puts((char *)compiled_sys);
 	}
     }
 #endif
 
-#ifdef FEAT_HUGE
-    MSG_PUTS(_("\nHuge version "));
+#if defined(FEAT_HUGE)
+    msg_puts(_("\nHuge version "));
+#elif defined(FEAT_NORMAL)
+    msg_puts(_("\nNormal version "));
 #else
-# ifdef FEAT_BIG
-    MSG_PUTS(_("\nBig version "));
-# else
-#  ifdef FEAT_NORMAL
-    MSG_PUTS(_("\nNormal version "));
-#  else
-#   ifdef FEAT_SMALL
-    MSG_PUTS(_("\nSmall version "));
-#   else
-    MSG_PUTS(_("\nTiny version "));
-#   endif
-#  endif
-# endif
+    msg_puts(_("\nTiny version "));
 #endif
-#ifndef FEAT_GUI
-    MSG_PUTS(_("without GUI."));
-#else
-# ifdef FEAT_GUI_GTK
-#  ifdef USE_GTK3
-    MSG_PUTS(_("with GTK3 GUI."));
-#  else
-#   ifdef FEAT_GUI_GNOME
-     MSG_PUTS(_("with GTK2-GNOME GUI."));
-#   else
-     MSG_PUTS(_("with GTK2 GUI."));
-#   endif
-# endif
+#if !defined(FEAT_GUI)
+    msg_puts(_("without GUI."));
+#elif defined(FEAT_GUI_GTK)
+# if defined(USE_GTK4)
+    msg_puts(_("with GTK4 GUI."));
+# elif defined(USE_GTK3)
+    msg_puts(_("with GTK3 GUI."));
+# elif defined(FEAT_GUI_GNOME)
+    msg_puts(_("with GTK2-GNOME GUI."));
 # else
-#  ifdef FEAT_GUI_MOTIF
-    MSG_PUTS(_("with X11-Motif GUI."));
-#  else
-#   ifdef FEAT_GUI_ATHENA
-#    ifdef FEAT_GUI_NEXTAW
-    MSG_PUTS(_("with X11-neXtaw GUI."));
-#    else
-    MSG_PUTS(_("with X11-Athena GUI."));
-#    endif
-#   else
-#     ifdef FEAT_GUI_PHOTON
-    MSG_PUTS(_("with Photon GUI."));
-#     else
-#      if defined(MSWIN)
-    MSG_PUTS(_("with GUI."));
-#      else
-#	if defined(TARGET_API_MAC_CARBON) && TARGET_API_MAC_CARBON
-    MSG_PUTS(_("with Carbon GUI."));
-#	else
-#	 if defined(TARGET_API_MAC_OSX) && TARGET_API_MAC_OSX
-    MSG_PUTS(_("with Cocoa GUI."));
-#	 else
-#	  if defined(MACOS)
-    MSG_PUTS(_("with (classic) GUI."));
-#	  endif
-#	 endif
-#	endif
-#      endif
-#    endif
-#   endif
-#  endif
+    msg_puts(_("with GTK2 GUI."));
 # endif
+#elif defined(FEAT_GUI_MOTIF)
+    msg_puts(_("with X11-Motif GUI."));
+#elif defined(FEAT_GUI_HAIKU)
+    msg_puts(_("with Haiku GUI."));
+#elif defined(FEAT_GUI_PHOTON)
+    msg_puts(_("with Photon GUI."));
+#elif defined(MSWIN)
+    msg_puts(_("with GUI."));
 #endif
     version_msg(_("  Features included (+) or not (-):\n"));
 
     list_features();
+    if (msg_col > 0)
+	msg_putchar('\n');
 
 #ifdef SYS_VIMRC_FILE
     version_msg(_("   system vimrc file: \""));
@@ -2257,9 +3790,20 @@ list_version(void)
     version_msg(USR_VIMRC_FILE2);
     version_msg("\"\n");
 #endif
-#ifdef USR_VIMRC_FILE3
+#if defined(USR_VIMRC_FILE3) && defined(XDG_VIMRC_FILE)
     version_msg(_(" 3rd user vimrc file: \""));
     version_msg(USR_VIMRC_FILE3);
+    version_msg("\"\n");
+    version_msg(_(" 4th user vimrc file: \""));
+    version_msg((char *)(XDG_VIMRC_FILE));
+    version_msg("\"\n");
+#elif defined(USR_VIMRC_FILE3)
+    version_msg(_(" 3rd user vimrc file: \""));
+    version_msg(USR_VIMRC_FILE3);
+    version_msg("\"\n");
+#elif defined(XDG_VIMRC_FILE)
+    version_msg(_(" 3rd user vimrc file: \""));
+    version_msg((char *)(XDG_VIMRC_FILE));
     version_msg("\"\n");
 #endif
 #ifdef USR_EXRC_FILE
@@ -2318,14 +3862,14 @@ list_version(void)
     version_msg(_("Compilation: "));
     version_msg((char *)all_cflags);
     version_msg("\n");
-#ifdef VMS
+# ifdef VMS
     if (*compiler_version != NUL)
     {
 	version_msg(_("Compiler: "));
 	version_msg((char *)compiler_version);
 	version_msg("\n");
     }
-#endif
+# endif
     version_msg(_("Linking: "));
     version_msg((char *)all_lflags);
 #endif
@@ -2335,23 +3879,8 @@ list_version(void)
 #endif
 }
 
-/*
- * Output a string for the version message.  If it's going to wrap, output a
- * newline, unless the message is too long to fit on the screen anyway.
- */
-    static void
-version_msg(char *s)
-{
-    int		len = (int)STRLEN(s);
-
-    if (!got_int && len < (int)Columns && msg_col + len >= (int)Columns
-								&& *s != '\n')
-	msg_putchar('\n');
-    if (!got_int)
-	MSG_PUTS(s);
-}
-
 static void do_intro_line(int row, char_u *mesg, int add_version, int attr);
+static void intro_message(int colon);
 
 /*
  * Show the intro message when not editing a file.
@@ -2361,9 +3890,7 @@ maybe_intro_message(void)
 {
     if (BUFEMPTY()
 	    && curbuf->b_fname == NULL
-#ifdef FEAT_WINDOWS
 	    && firstwin->w_next == NULL
-#endif
 	    && vim_strchr(p_shm, SHM_INTRO) == NULL)
 	intro_message(FALSE);
 }
@@ -2373,9 +3900,9 @@ maybe_intro_message(void)
  * Only used when starting Vim on an empty file, without a file name.
  * Or with the ":intro" command (for Sven :-).
  */
-    void
+    static void
 intro_message(
-    int		colon)		/* TRUE for ":intro" */
+    int		colon)		// TRUE for ":intro"
 {
     int		i;
     int		row;
@@ -2394,11 +3921,11 @@ intro_message(
 	N_("Vim is open source and freely distributable"),
 	"",
 	N_("Help poor children in Uganda!"),
-	N_("type  :help iccf<Enter>       for information "),
+	N_("type  :help Kuwasha<Enter>    for information "),
 	"",
 	N_("type  :q<Enter>               to exit         "),
 	N_("type  :help<Enter>  or  <F1>  for on-line help"),
-	N_("type  :help version8<Enter>   for version info"),
+	N_("type  :help version9<Enter>   for version info"),
 	NULL,
 	"",
 	N_("Running in Vi compatible mode"),
@@ -2412,9 +3939,9 @@ intro_message(
 	NULL,
 	NULL,
 	NULL,
-#ifdef MODIFIED_BY
+# ifdef MODIFIED_BY
 	NULL,
-#endif
+# endif
 	NULL,
 	NULL,
 	NULL,
@@ -2431,29 +3958,26 @@ intro_message(
     };
 #endif
 
-    /* blanklines = screen height - # message lines */
-    blanklines = (int)Rows - ((sizeof(lines) / sizeof(char *)) - 1);
+    // blanklines = screen height - # message lines
+    blanklines = (int)Rows - (ARRAY_LENGTH(lines) - 1);
     if (!p_cp)
-	blanklines += 4;  /* add 4 for not showing "Vi compatible" message */
+	blanklines += 4;  // add 4 for not showing "Vi compatible" message
 
-#ifdef FEAT_WINDOWS
-    /* Don't overwrite a statusline.  Depends on 'cmdheight'. */
+    // Don't overwrite a statusline.  Depends on 'cmdheight'.
     if (p_ls > 1)
 	blanklines -= Rows - topframe->fr_height;
-#endif
     if (blanklines < 0)
 	blanklines = 0;
 
-    /* Show the sponsor and register message one out of four times, the Uganda
-     * message two out of four times. */
+    // Show the sponsor and Uganda message two out of four times
     sponsor = (int)time(NULL);
     sponsor = ((sponsor & 2) == 0) - ((sponsor & 4) == 0);
 
-    /* start displaying the message lines after half of the blank lines */
+    // start displaying the message lines after half of the blank lines
     row = blanklines / 2;
-    if ((row >= 2 && Columns >= 50) || colon)
+    if ((row >= 2 && topframe->fr_width >= 50) || colon)
     {
-	for (i = 0; i < (int)(sizeof(lines) / sizeof(char *)); ++i)
+	for (i = 0; i < (int)ARRAY_LENGTH(lines); ++i)
 	{
 	    p = lines[i];
 #ifdef FEAT_GUI
@@ -2469,15 +3993,11 @@ intro_message(
 	    if (sponsor != 0)
 	    {
 		if (strstr(p, "children") != NULL)
-		    p = sponsor < 0
-			? N_("Sponsor Vim development!")
-			: N_("Become a registered Vim user!");
-		else if (strstr(p, "iccf") != NULL)
-		    p = sponsor < 0
-			? N_("type  :help sponsor<Enter>    for information ")
-			: N_("type  :help register<Enter>   for information ");
+		    p = N_("Sponsor Vim development!");
+		else if (strstr(p, "Kuwasha") != NULL)
+		    p = N_("type  :help sponsor<Enter>    for information ");
 		else if (strstr(p, "Orphans") != NULL)
-		    p = N_("menu  Help->Sponsor/Register  for information    ");
+		    p = N_("menu  Help->Sponsor           for information    ");
 	    }
 	    if (*p != NUL)
 		do_intro_line(row, (char_u *)_(p), i == 2, 0);
@@ -2485,7 +4005,7 @@ intro_message(
 	}
     }
 
-    /* Make the wait-return message appear just below the text. */
+    // Make the wait-return message appear just below the text.
     if (colon)
 	msg_row = row;
 }
@@ -2515,17 +4035,17 @@ do_intro_line(
     }
 #endif
 
-    /* Center the message horizontally. */
+    // Center the message horizontally.
     col = vim_strsize(mesg);
     if (add_version)
     {
 	STRCPY(vers, mediumVersion);
 	if (highest_patch())
 	{
-	    /* Check for 9.9x or 9.9xx, alpha/beta version */
-	    if (isalpha((int)vers[3]))
+	    // Check for 9.9x or 9.9xx, alpha/beta version
+	    if (SAFE_isalpha((int)vers[3]))
 	    {
-		int len = (isalpha((int)vers[4])) ? 5 : 4;
+		int len = (SAFE_isalpha((int)vers[4])) ? 5 : 4;
 		sprintf((char *)vers + len, ".%d%s", highest_patch(),
 							 mediumVersion + len);
 	    }
@@ -2534,34 +4054,33 @@ do_intro_line(
 	}
 	col += (int)STRLEN(vers);
     }
-    col = (Columns - col) / 2;
+    col = (topframe->fr_width - col) / 2;
     if (col < 0)
 	col = 0;
 
-    /* Split up in parts to highlight <> items differently. */
+    // Split up in parts to highlight <> items differently.
     for (p = mesg; *p != NUL; p += l)
     {
 	clen = 0;
 	for (l = 0; p[l] != NUL
 			 && (l == 0 || (p[l] != '<' && p[l - 1] != '>')); ++l)
 	{
-#ifdef FEAT_MBYTE
 	    if (has_mbyte)
 	    {
 		clen += ptr2cells(p + l);
 		l += (*mb_ptr2len)(p + l) - 1;
 	    }
 	    else
-#endif
 		clen += byte2cells(p[l]);
 	}
-	screen_puts_len(p, l, row, col, *p == '<' ? HL_ATTR(HLF_8) : attr);
+	screen_puts_len(p, l, row, col + firstwin->w_wincol,
+		*p == '<' ? HL_ATTR(HLF_8) : attr);
 	col += clen;
     }
 
-    /* Add the version number to the version line. */
+    // Add the version number to the version line.
     if (add_version)
-	screen_puts(vers, row, col, 0);
+	screen_puts(vers, row, col + firstwin->w_wincol, 0);
 }
 
 /*
@@ -2571,6 +4090,9 @@ do_intro_line(
 ex_intro(exarg_T *eap UNUSED)
 {
     screenclear();
+#if defined(FEAT_TABPANEL)
+    draw_tabpanel();
+#endif
     intro_message(TRUE);
     wait_return(TRUE);
 }

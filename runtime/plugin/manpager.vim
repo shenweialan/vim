@@ -1,29 +1,56 @@
 " Vim plugin for using Vim as manpager.
 " Maintainer: Enno Nagel <ennonagel+vim@gmail.com>
-" Last Change: 2016 May 20
+" Last Change: 2024 Jul 03
+" 2026 Mar 22 by Vim Project: strip OSC 9 sequences (#19787)
+" 2026 Mar 24 by Vim Project: strip Bell char: Ctrl-G (#19807)
 
-" $MAN_PN is supposed to be set by MANPAGER, see ":help manpager.vim".
-if empty($MAN_PN)
+if exists('g:loaded_manpager_plugin')
   finish
 endif
+let g:loaded_manpager_plugin = 1
 
-command! -nargs=0 MANPAGER call s:MANPAGER() | delcommand MANPAGER
+" Set up the current buffer (likely read from stdin) as a manpage
+command MANPAGER call s:ManPager()
 
-function! s:MANPAGER()
-  let page_pattern = '\v\w+%([-_.]\w+)*'
-  let sec_pattern = '\v\w+%(\+\w+)*'
-  let pagesec_pattern = '\v(' . page_pattern . ')\((' . sec_pattern . ')\)'
+function s:ManPager()
+  " global options, keep these to a minimum to avoid side effects
+  if &compatible
+    set nocompatible
+  endif
+  if exists('+viminfofile')
+    set viminfofile=NONE
+  endif
+  syntax on
 
-  if $MAN_PN is '1'
-    let manpage = matchstr( getline(1), '^' . pagesec_pattern )
-  else
-    let manpage = expand('$MAN_PN')
+  " Ensure text width matches window width
+  setlocal foldcolumn& nofoldenable nonumber norelativenumber
+
+  " In case Vim was invoked with -M
+  setlocal modifiable
+
+  " Emulate 'col -b'
+  exe 'silent! keepj keepp %s/\v(.)\b\ze\1?//e' .. (&gdefault ? '' : 'g')
+
+  " Remove ansi sequences
+  exe 'silent! keepj keepp %s/\v\e\[%(%(\d;)?\d{1,2})?[mK]//e' .. (&gdefault ? '' : 'g')
+
+  " Remove OSC 8 hyperlink sequences: \e]8;;...\e\ or \e]8;;...<BEL>
+  exe 'silent! keepj keepp %s/\v\e\]8;[^\x07\e]*%(%x07|\e\\)//e' .. (&gdefault ? '' : 'g')
+
+  " Remove empty lines above the header
+  call cursor(1, 1)
+  let n = search(".*(.*)", "c")
+  if n > 1
+    exe "1," . n-1 . "d"
   endif
 
-  let page_sec = matchlist(tolower(manpage), '^' . pagesec_pattern  . '$')
+  " Finished preprocessing the buffer, prevent any further modifications
+  setlocal nomodified nomodifiable
 
-  bwipe!
+  " Make this an unlisted, readonly scratch buffer
+  setlocal buftype=nofile noswapfile bufhidden=hide nobuflisted readonly
 
+  " Set filetype to man even if ftplugin is disabled
   setlocal filetype=man
-  exe 'Man' page_sec[2] page_sec[1]
+  runtime ftplugin/man.vim
 endfunction

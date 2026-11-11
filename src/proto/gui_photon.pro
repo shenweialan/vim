@@ -1,4 +1,4 @@
-/* gui_photon.c */
+// gui_photon.c
 void gui_ph_encoding_changed(int new_encoding);
 void gui_mch_prepare(int *argc, char **argv);
 int gui_mch_init(void);
@@ -6,7 +6,7 @@ int gui_mch_init_check(void);
 int gui_mch_open(void);
 void gui_mch_exit(int rc);
 void gui_mch_update(void);
-int gui_mch_wait_for_chars(int wtime);
+int gui_mch_wait_for_chars(long wtime);
 char_u *gui_mch_browse(int saving, char_u *title, char_u *default_name, char_u *ext, char_u *initdir, char_u *filter);
 int gui_mch_dialog(int type, char_u *title, char_u *message, char_u *buttons, int default_button, char_u *textfield, int ex_cmd);
 int gui_mch_get_winpos(int *x, int *y);
@@ -18,6 +18,8 @@ void gui_mch_set_foreground(void);
 void gui_mch_settitle(char_u *title, char_u *icon);
 void gui_mch_set_scrollbar_thumb(scrollbar_T *sb, int val, int size, int max);
 void gui_mch_set_scrollbar_pos(scrollbar_T *sb, int x, int y, int w, int h);
+int gui_mch_get_scrollbar_xpadding(void);
+int gui_mch_get_scrollbar_ypadding(void);
 void gui_mch_create_scrollbar(scrollbar_T *sb, int orient);
 void gui_mch_enable_scrollbar(scrollbar_T *sb, int flag);
 void gui_mch_destroy_scrollbar(scrollbar_T *sb);
@@ -28,6 +30,7 @@ void gui_mch_setmouse(int x, int y);
 guicolor_T gui_mch_get_rgb(guicolor_T pixel);
 void gui_mch_new_colors(void);
 guicolor_T gui_mch_get_color(char_u *name);
+guicolor_T gui_mch_get_rgb_color(int r, int g, int b);
 void gui_mch_set_fg_color(guicolor_T color);
 void gui_mch_set_bg_color(guicolor_T color);
 void gui_mch_set_sp_color(guicolor_T color);
@@ -43,7 +46,7 @@ int gui_mch_is_blinking(void);
 int gui_mch_is_blink_off(void);
 void gui_mch_set_blinking(long wait, long on, long off);
 void gui_mch_start_blink(void);
-void gui_mch_stop_blink(void);
+void gui_mch_stop_blink(int may_call_gui_update_cursor);
 void gui_mch_beep(void);
 void gui_mch_flash(int msec);
 void gui_mch_flush(void);
@@ -66,4 +69,4 @@ GuiFont gui_mch_get_font(char_u *vim_font_name, int report_error);
 char_u *gui_mch_get_fontname(GuiFont font, char_u *name);
 void gui_mch_set_font(GuiFont font);
 void gui_mch_free_font(GuiFont font);
-/* vim: set ft=c : */
+// vim: ft=c

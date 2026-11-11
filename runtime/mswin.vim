@@ -1,9 +1,10 @@
 " Set options and add mapping such that Vim behaves a lot like MS-Windows
 "
-" Maintainer:	Bram Moolenaar <Bram@vim.org>
-" Last change:	2017 Feb 09
+" Maintainer:	The Vim Project <https://github.com/vim/vim>
+" Last Change:	2024 Mar 13
+" Former Maintainer:	Bram Moolenaar <Bram@vim.org>
 
-" bail out if this isn't wanted (mrsvim.vim uses this).
+" Bail out if this isn't wanted.
 if exists("g:skip_loading_mswin") && g:skip_loading_mswin
   finish
 endif
@@ -23,6 +24,9 @@ set backspace=indent,eol,start whichwrap+=<,>,[,]
 " backspace in Visual mode deletes selection
 vnoremap <BS> d
 
+" the better solution would be to use has("clipboard_working"),
+" but that may not be available yet while starting up, so let's just check if
+" clipboard support has been compiled in and assume it will be working :/
 if has("clipboard")
     " CTRL-X and SHIFT-Del are Cut
     vnoremap <C-X> "+x
@@ -38,6 +42,23 @@ if has("clipboard")
 
     cmap <C-V>		<C-R>+
     cmap <S-Insert>		<C-R>+
+else
+		" Use the unnamed register when clipboard support not available
+
+    " CTRL-X and SHIFT-Del are Cut
+    vnoremap <C-X>   x
+    vnoremap <S-Del> x
+
+    " CTRL-C and CTRL-Insert are Copy
+    vnoremap <C-C>      y
+    vnoremap <C-Insert> y
+
+    " CTRL-V and SHIFT-Insert are Paste
+    noremap <C-V>      gP
+    noremap <S-Insert> gP
+
+    inoremap <C-V>      <C-R>"
+    inoremap <S-Insert> <C-R>"
 endif
 
 " Pasting blockwise and linewise selections is not possible in Insert and
@@ -46,7 +67,7 @@ endif
 " Uses the paste.vim autoload script.
 " Use CTRL-G u to have CTRL-Z only undo the paste.
 
-if 1
+if has("clipboard")
     exe 'inoremap <script> <C-V> <C-G>u' . paste#paste_cmd['i']
     exe 'vnoremap <script> <C-V> ' . paste#paste_cmd['v']
 endif
@@ -57,10 +78,11 @@ vmap <S-Insert>		<C-V>
 " Use CTRL-Q to do what CTRL-V used to do
 noremap <C-Q>		<C-V>
 
-" Use CTRL-S for saving, also in Insert mode
+" Use CTRL-S for saving, also in Insert mode (<C-O> doesn't work well when
+" using completions).
 noremap <C-S>		:update<CR>
 vnoremap <C-S>		<C-C>:update<CR>
-inoremap <C-S>		<C-O>:update<CR>
+inoremap <C-S>		<Esc>:update<CR>gi
 
 " For CTRL-V to work autoselect must be off.
 " On Unix we have two selections, autoselect can be used.
@@ -105,14 +127,15 @@ onoremap <C-F4> <C-C><C-W>c
 
 if has("gui")
   " CTRL-F is the search dialog
-  noremap <C-F> :promptfind<CR>
-  inoremap <C-F> <C-\><C-O>:promptfind<CR>
-  cnoremap <C-F> <C-\><C-C>:promptfind<CR>
+  noremap  <expr> <C-F> has("gui_running") ? ":promptfind\<CR>" : "/"
+  inoremap <expr> <C-F> has("gui_running") ? "\<C-\>\<C-O>:promptfind\<CR>" : "\<C-\>\<C-O>/"
+  cnoremap <expr> <C-F> has("gui_running") ? "\<C-\>\<C-C>:promptfind\<CR>" : "\<C-\>\<C-O>/"
 
-  " CTRL-H is the replace dialog
-  noremap <C-H> :promptrepl<CR>
-  inoremap <C-H> <C-\><C-O>:promptrepl<CR>
-  cnoremap <C-H> <C-\><C-C>:promptrepl<CR>
+  " CTRL-H is the replace dialog,
+  " but in console, it might be backspace, so don't map it there
+  nnoremap <expr> <C-H> has("gui_running") ? ":promptrepl\<CR>" : "\<C-H>"
+  inoremap <expr> <C-H> has("gui_running") ? "\<C-\>\<C-O>:promptrepl\<CR>" : "\<C-H>"
+  cnoremap <expr> <C-H> has("gui_running") ? "\<C-\>\<C-C>:promptrepl\<CR>" : "\<C-H>"
 endif
 
 " restore 'cpoptions'

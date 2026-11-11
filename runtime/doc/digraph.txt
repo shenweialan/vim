@@ -1,7 +1,7 @@
-*digraph.txt*   For Vim version 8.0.  Last change: 2016 Nov 04
+*digraph.txt*	For Vim version 9.2.  Last change: 2026 Feb 14
 
 
-		  VIM REFERENCE MANUAL    by Bram Moolenaar
+		  VIM REFERENCE MANUAL	  by Bram Moolenaar
 
 
 Digraphs					*digraph* *digraphs* *Digraphs*
@@ -18,13 +18,14 @@ An alternative is using the 'keymap' option.
 2. Using digraphs	|digraphs-use|
 3. Default digraphs	|digraphs-default|
 
-{Vi does not have any of these commands}
 
 ==============================================================================
 1. Defining digraphs					*digraphs-define*
 
 						*:dig* *:digraphs*
-:dig[raphs]		show currently defined digraphs.
+:dig[raphs][!]		Show currently defined digraphs.
+			With [!] headers are used to make it a bit easier to
+			find a specific character.
 							*E104* *E39*
 :dig[raphs] {char1}{char2} {number} ...
 			Add digraph {char1}{char2} to the list.  {number} is
@@ -32,9 +33,14 @@ An alternative is using the 'keymap' option.
 			it is the Unicode character, see |digraph-encoding|.
 			Example: >
 	:digr e: 235 a: 228
+<			You can use `:exe` to enter a hex number: >
+	:exe 'digr += ' .. 0x2A72
 <			Avoid defining a digraph with '_' (underscore) as the
 			first character, it has a special meaning in the
 			future.
+			NOTE: This command cannot add a digraph that starts
+			with a white space.  If you want to add such digraph,
+			you can use |digraph_set()| instead.
 
 Vim is normally compiled with the |+digraphs| feature.  If the feature is
 disabled, the ":digraph" command will display an error message.
@@ -57,18 +63,9 @@ conversion to be available, it might fail.  For the NUL character you will see
 "10".  That's because NUL characters are internally represented with a NL
 character.  When you write the file it will become a NUL character.
 
-When Vim was compiled without the |+multi_byte| feature, you need to specify
-the character in the encoding given with 'encoding'.  You might want to use
-something like this: >
-
-	if has("multi_byte")
-		digraph oe 339
-	elseif &encoding == "iso-8859-15"
-		digraph oe 189
-	endif
-
-This defines the "oe" digraph for a character that is number 339 in Unicode
-and 189 in latin9 (iso-8859-15).
+Example: >
+	digraph oe 339
+This defines the "oe" digraph for a character that is number 339 in Unicode.
 
 ==============================================================================
 2. Using digraphs					*digraphs-use*
@@ -111,11 +108,14 @@ this, you will have to type <BS> e again.  To avoid this don't set the
 
 You may have problems using Vim with characters which have a value above 128.
 For example: You insert ue (u-umlaut) and the editor echoes \334 in Insert
-mode.  After leaving the Insert mode everything is fine.  Note that fmt
-removes all characters with a value above 128 from the text being formatted.
-On some Unix systems this means you have to define the environment-variable
-LC_CTYPE.  If you are using csh, then put the following line in your .cshrc: >
-	setenv LC_CTYPE iso_8859_1
+mode.  After leaving the Insert mode everything is fine.  On some Unix systems
+this means you have to define the environment-variable LC_CTYPE.  If you are
+using csh, then put the following line in your .cshrc: >
+	setenv LC_CTYPE en_US.utf8
+(or similar for a different language or country).  The value must be a valid
+locale on your system, i.e. on Unix-like systems it must be present in the
+output of >
+	locale -a
 
 ==============================================================================
 3. Default digraphs					*digraphs-default*
@@ -125,8 +125,8 @@ see them.
 
 On most systems Vim uses the same digraphs.  They work for the Unicode and
 ISO-8859-1 character sets.  These default digraphs are taken from the RFC1345
-mnemonics.  To make it easy to remember the mnemonic, the second character has
-a standard meaning:
+mnemonics (with some additions).  To make it easy to remember the mnemonic,
+the second character has a standard meaning:
 
 	char name		char	meaning ~
 	Exclamation mark	!	Grave
@@ -159,11 +159,10 @@ a standard meaning:
 Example: a: is ä  and o: is ö
 
 These are the RFC1345 digraphs for the one-byte characters.  See the output of
-":digraphs" for the others.  The characters above 255 are only available when
-Vim was compiled with the |+multi_byte| feature.
+":digraphs" for the others.
 
 EURO
-
+							*euro* *euro-digraph*
 Exception: RFC1345 doesn't specify the euro sign.  In Vim the digraph =e was
 added for this.  Note the difference between latin1, where the digraph Cu is
 used for the currency sign, and latin9 (iso-8859-15), where the digraph =e is
@@ -174,6 +173,13 @@ ROUBLE
 
 The rouble sign was added in 2014 as 0x20bd.  Vim supports the digraphs =R and
 =P for this.  Note that R= and P= are other characters.
+
+QUADRUPLE PRIME
+
+The quadruple prime using the digraph 4' was added in 2023.  Although it is
+not part of RFC 1345, it supplements the existing digraph implementation as
+there already exist digraphs for PRIME, DOUBLE PRIME and TRIPLE PRIME using
+the 1', 2' and 3' digraphs.
 
 							*digraph-table*
 char  digraph	hex	dec	official name ~
@@ -352,8 +358,8 @@ $	DO	0x24	 36	DOLLAR SIGN
 þ	th	0xfe	254	LATIN SMALL LETTER THORN (Icelandic)
 ÿ	y:	0xff	255	LATIN SMALL LETTER Y WITH DIAERESIS
 
-If your Vim is compiled with |multibyte| support and you are using a multibyte
-'encoding', Vim provides this enhanced set of additional digraphs:
+If you are using a |multibyte| 'encoding', Vim provides this enhanced set of
+additional digraphs:
 
 							*digraph-table-mbyte*
 char  digraph	hex	dec	official name ~
@@ -548,7 +554,7 @@ char  digraph	hex	dec	official name ~
 Θ	H*	0398	0920	GREEK CAPITAL LETTER THETA
 Ι	I*	0399	0921	GREEK CAPITAL LETTER IOTA
 Κ	K*	039A	0922	GREEK CAPITAL LETTER KAPPA
-Λ	L*	039B	0923	GREEK CAPITAL LETTER LAMDA
+Λ	L*	039B	0923	GREEK CAPITAL LETTER LAMDA (aka LAMBDA)
 Μ	M*	039C	0924	GREEK CAPITAL LETTER MU
 Ν	N*	039D	0925	GREEK CAPITAL LETTER NU
 Ξ	C*	039E	0926	GREEK CAPITAL LETTER XI
@@ -579,7 +585,7 @@ char  digraph	hex	dec	official name ~
 θ	h*	03B8	0952	GREEK SMALL LETTER THETA
 ι	i*	03B9	0953	GREEK SMALL LETTER IOTA
 κ	k*	03BA	0954	GREEK SMALL LETTER KAPPA
-λ	l*	03BB	0955	GREEK SMALL LETTER LAMDA
+λ	l*	03BB	0955	GREEK SMALL LETTER LAMDA (aka LAMBDA)
 μ	m*	03BC	0956	GREEK SMALL LETTER MU
 ν	n*	03BD	0957	GREEK SMALL LETTER NU
 ξ	c*	03BE	0958	GREEK SMALL LETTER XI
@@ -925,12 +931,14 @@ char  digraph	hex	dec	official name ~
 ‟	9"	201F	8223	DOUBLE HIGH-REVERSED-9 QUOTATION MARK
 †	/-	2020	8224	DAGGER
 ‡	/=	2021	8225	DOUBLE DAGGER
+•	oo	2022	8226	BULLET
 ‥	..	2025	8229	TWO DOT LEADER
 …	,.	2026	8230	HORIZONTAL ELLIPSIS
 ‰	%0	2030	8240	PER MILLE SIGN
 ′	1'	2032	8242	PRIME
 ″	2'	2033	8243	DOUBLE PRIME
 ‴	3'	2034	8244	TRIPLE PRIME
+⁗	4'	2057	8279	QUADRUPLE PRIME
 ‵	1"	2035	8245	REVERSED PRIME
 ‶	2"	2036	8246	REVERSED DOUBLE PRIME
 ‷	3"	2037	8247	REVERSED TRIPLE PRIME
@@ -1067,6 +1075,7 @@ char  digraph	hex	dec	official name ~
 ≅	?=	2245	8773	APPROXIMATELY EQUAL TO
 ≈	?2	2248	8776	ALMOST EQUAL TO
 ≌	=?	224C	8780	ALL EQUAL TO
+≐	.=	2250	8784	APPROACHES THE LIMIT
 ≓	HI	2253	8787	IMAGE OF OR APPROXIMATELY EQUAL TO
 ≠	!=	2260	8800	NOT EQUAL TO
 ≡	=3	2261	8801	IDENTICAL TO
@@ -1096,8 +1105,8 @@ char  digraph	hex	dec	official name ~
 ⌕	TR	2315	8981	TELEPHONE RECORDER
 ⌠	Iu	2320	8992	TOP HALF INTEGRAL
 ⌡	Il	2321	8993	BOTTOM HALF INTEGRAL
-〈	</	2329	9001	LEFT-POINTING ANGLE BRACKET
-〉	/>	232A	9002	RIGHT-POINTING ANGLE BRACKET
+⟨	<[	27E8	10040	LEFT MATHEMATICAL ANGLE BRACKET
+⟩	]>	27E9	10041	RIGHT MATHEMATICAL ANGLE BRACKET
 ␣	Vs	2423	9251	OPEN BOX
 ⑀	1h	2440	9280	OCR HOOK
 ⑁	3h	2441	9281	OCR CHAIR
@@ -1237,6 +1246,8 @@ char  digraph	hex	dec	official name ~
 々	*_	3005	12293	IDEOGRAPHIC ITERATION MARK
 〆	;_	3006	12294	IDEOGRAPHIC CLOSING MARK
 〇	0_	3007	12295	IDEOGRAPHIC NUMBER ZERO
+〈	</	3008	12296	LEFT ANGLE BRACKET
+〉	/>	3009	12297	RIGHT ANGLE BRACKET
 《	<+	300A	12298	LEFT DOUBLE ANGLE BRACKET
 》	>+	300B	12299	RIGHT DOUBLE ANGLE BRACKET
 「	<'	300C	12300	LEFT CORNER BRACKET
@@ -1488,4 +1499,4 @@ char  digraph	hex	dec	official name ~
 ﬅ	ft	FB05	64261	LATIN SMALL LIGATURE LONG S T
 ﬆ	st	FB06	64262	LATIN SMALL LIGATURE ST
 
- vim:tw=78:ts=8:ft=help:norl:
+ vim:tw=78:ts=8:noet:ft=help:norl:

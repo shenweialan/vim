@@ -8,132 +8,86 @@
  * See README.txt for an overview of the Vim source code.
  */
 /*
- * Windows GUI: main program (EXE) entry point:
+ * Windows GUI/Console: main program (EXE) entry point:
  *
- * Ron Aaron <ronaharon@yahoo.com> wrote this and  the DLL support code.
+ * Ron Aaron <ronaharon@yahoo.com> wrote this and the DLL support code.
+ * Adapted by Ken Takata.
  */
 #include "vim.h"
 
-#ifdef __MINGW32__
-# ifndef _cdecl
-#  define _cdecl
-# endif
+// cproto doesn't create a prototype for VimMain()
+#ifdef VIMDLL
+__declspec(dllimport)
 #endif
+int VimMain(int argc, char **argv);
 
-/* cproto doesn't create a prototype for main() */
-int _cdecl
-#if defined(FEAT_GUI_W32)
-VimMain
+#ifdef VIMDLL
+# define SaveInst(hInst)    // Do nothing
 #else
-    main
+void SaveInst(HINSTANCE hInst);
 #endif
-	(int argc, char **argv);
-static int (_cdecl *pmain)(int, char **);
 
-#ifndef PROTO
 #ifdef FEAT_GUI
-#ifndef VIMDLL
-void _cdecl SaveInst(HINSTANCE hInst);
-#endif
-static void (_cdecl *pSaveInst)(HINSTANCE);
-#endif
-
     int WINAPI
-WinMain(
-    HINSTANCE	hInstance UNUSED,
+wWinMain(
+    HINSTANCE	hInstance,
     HINSTANCE	hPrevInst UNUSED,
-    LPSTR	lpszCmdLine,
+    LPWSTR	lpszCmdLine UNUSED,
     int		nCmdShow UNUSED)
 {
-    int		argc = 0;
-    char	**argv;
-    char	*tofree;
-    char	prog[256];
-#ifdef VIMDLL
-    char	*p;
-    HANDLE	hLib;
-#endif
-
-    /* Ron: added full path name so that the $VIM variable will get set to our
-     * startup path (so the .vimrc file can be found w/o a VIM env. var.) */
-    GetModuleFileName(NULL, prog, 255);
-
-    argc = get_cmd_args(prog, (char *)lpszCmdLine, &argv, &tofree);
-    if (argc == 0)
-    {
-	MessageBox(0, "Could not allocate memory for command line.",
-							      "VIM Error", 0);
-	return 0;
-    }
-
-#ifdef DYNAMIC_GETTEXT
-    /* Initialize gettext library */
-    dyn_libintl_init();
-#endif
-
-#ifdef VIMDLL
-    // LoadLibrary - get name of dll to load in here:
-    p = strrchr(prog, '\\');
-    if (p != NULL)
-    {
-# ifdef DEBUG
-	strcpy(p+1, "vim32d.dll");
-# else
-	strcpy(p+1, "vim32.dll");
-# endif
-    }
-    hLib = LoadLibrary(prog);
-    if (hLib == NULL)
-    {
-	MessageBox(0, _("Could not load vim32.dll!"), _("VIM Error"), 0);
-	goto errout;
-    }
-    // fix up the function pointers
-# ifdef FEAT_GUI
-    pSaveInst = GetProcAddress(hLib, (LPCSTR)2);
-# endif
-    pmain = GetProcAddress(hLib, (LPCSTR)1);
-    if (pmain == NULL)
-    {
-	MessageBox(0, _("Could not fix up function pointers to the DLL!"),
-							    _("VIM Error"),0);
-	goto errout;
-    }
+    SaveInst(hInstance);
+    return VimMain(0, NULL);
+}
 #else
+    int
+wmain(int argc UNUSED, wchar_t **argv UNUSED)
+{
+    SaveInst(GetModuleHandleW(NULL));
+    return VimMain(0, NULL);
+}
+#endif
+
+#ifdef USE_OWNSTARTUP
+// Use our own entry point and don't use the default CRT startup code to
+// reduce the size of (g)vim.exe.  This works only when VIMDLL is defined.
+//
+// For MSVC, the /GS- compiler option is needed to avoid the undefined symbol
+// error.  (It disables the security check. However, it affects only this
+// function and doesn't have any effect on Vim itself.)
+// For MinGW, the -nostdlib compiler option and the --entry linker option are
+// needed.
 # ifdef FEAT_GUI
-    pSaveInst = SaveInst;
-# endif
-    pmain =
-# if defined(FEAT_GUI_W32)
-    //&& defined(__MINGW32__)
-	VimMain
+    void WINAPI
+wWinMainCRTStartup(void)
+{
+    VimMain(0, NULL);
+}
 # else
-	main
+    void
+wmainCRTStartup(void)
+{
+    VimMain(0, NULL);
+}
 # endif
-	;
-#endif
-#ifdef FEAT_GUI
-    pSaveInst(
-#ifdef __MINGW32__
-	    GetModuleHandle(NULL)
-#else
-	    hInstance
-#endif
-	    );
-#endif
-    pmain(argc, argv);
+#endif	// USE_OWNSTARTUP
 
-#ifdef VIMDLL
-    FreeLibrary(hLib);
-errout:
-#endif
-    free(argv);
-    if (tofree != NULL)
-	free(tofree);
-#ifdef FEAT_MBYTE
-    free_cmd_argsW();
-#endif
 
-    return 0;
+#if defined(VIMDLL) && defined(FEAT_MZSCHEME)
+
+# if defined(_MSC_VER)
+static __declspec(thread) void *tls_space;
+extern intptr_t _tls_index;
+# elif defined(__MINGW32__)
+static __thread void *tls_space;
+extern intptr_t _tls_index;
+# endif
+
+// Get TLS information that is needed for if_mzsch.
+    __declspec(dllexport) void
+get_tls_info(void ***ptls_space, intptr_t *ptls_index)
+{
+    *ptls_space = &tls_space;
+    *ptls_index = _tls_index;
+    return;
 }
 #endif

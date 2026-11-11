@@ -1,7 +1,7 @@
-*os_mac.txt*    For Vim version 8.0.  Last change: 2006 Apr 30
+*os_mac.txt*	For Vim version 9.2.  Last change: 2026 Feb 14
 
 
-		  VIM REFERENCE MANUAL    by Bram Moolenaar et al.
+		  VIM REFERENCE MANUAL	  by Bram Moolenaar et al.
 
 
 					*mac* *Mac* *macintosh* *Macintosh*
@@ -18,6 +18,7 @@ NOTE: This file is a bit outdated.  You might find more useful info here:
 5. Known Lack			|mac-lack|
 6. Mac Bug Report		|mac-bug|
 7. Compiling Vim		|mac-compile|
+8. The darwin feature		|mac-darwin-feature|
 
 There was a Mac port for version 3.0 of Vim.  Here are the first few lines
 from the old file:
@@ -35,7 +36,7 @@ Indianapolis IN 46220 USA
 1. Filename Convention					*mac-filename*
 
 Starting with Vim version 7 you can just use the unix path separators with
-Vim. In order to determine if the specified filename is relative to the
+Vim.  In order to determine if the specified filename is relative to the
 current folder or absolute (i.e. relative to the "Desktop"), the following
 algorithm is used:
 
@@ -69,7 +70,7 @@ default command-key mappings.
 On older systems files starting with a dot "." are discouraged, thus the rc
 files are named "vimrc" or "_vimrc" and "gvimrc" or "_gvimrc".  These files
 can be in any format (mac, dos or unix).  Vim can handle any file format when
-the |'nocompatible'| option is set, otherwise it will only handle mac format
+the 'nocompatible' option is set, otherwise it will only handle mac format
 files.
 
 ==============================================================================
@@ -86,7 +87,7 @@ Backspace		"*d			cut Visual text
 ==============================================================================
 4. Mac FAQ						*mac-faq*
 
-On the internet:  http://macvim.org/OSX/index.php#FAQ
+On the internet:  https://github.com/macvim-dev/macvim/wiki/FAQ
 
 Q: I can't enter non-ASCII character in Apple Terminal.
 A: Under Window Settings, Emulation, make sure that "Escape non-ASCII
@@ -117,14 +118,69 @@ Shift-Control-2.
 
 When reporting any Mac specific bug or feature change, please use the vim-mac
 maillist |vim-mac|.  However, you need to be subscribed.  An alternative is to
-send a message to the current MacVim maintainers:
+report issues either directly at the Vim github repository:
 
-	mac@vim.org
+https://github.com/vim/vim/issues
+
+or for MacVim specific issues, you may report those over here:
+
+https://github.com/macvim-dev/macvim/issues
 
 ==============================================================================
 7. Compiling Vim					*mac-compile*
 
 See the file "src/INSTALLmac.txt" that comes with the source files.
 
+==============================================================================
+8. The Darwin Feature					*mac-darwin-feature*
 
- vim:tw=78:ts=8:ft=help:norl:
+If you have a Mac that isn't very old, you will be running OS X, also called
+Darwin.  The last pre-Darwin OS was Mac OS 9.  The darwin feature makes Vim
+use Darwin-specific properties.
+
+What is accomplished with this feature is two-fold:
+
+- Make Vim interoperable with the system clipboard.
+- Incorporate into Vim a converter module that bridges the gap between some
+  character encodings specific to the platform and those known to Vim.
+
+Needless to say, both are not to be missed for any decent text editor to work
+nicely with other applications running on the same desktop environment.
+
+As Vim is not an application dedicated only to macOS, we need an extra feature
+to add in order for it to offer the same user experience that our users on
+other platforms enjoy to people on macOS.
+
+For brevity, the feature is referred to as "darwin" to signify it one of the
+Vim features that are specific to that particular platform.
+
+The feature is a configuration option.  Accordingly, whether it is enabled or
+not is determined at build time; once it is selected to be enabled, it is
+compiled in and hence cannot be disabled at runtime.
+
+The feature is enabled by default.  For most macOS users, that should be
+sufficient unless they have specific needs mentioned briefly below.
+
+If you want to disable it, pass `--disable-darwin` to the configure script: >
+
+    ./configure --disable-darwin <other options>
+
+and then run `make` to build Vim.  The order of the options doesn't matter.
+
+To make sure at runtime whether or not the darwin feature is compiled in, you
+can use `has('osxdarwin')` which returns 1 if the feature is compiled in; 0
+otherwise.  For backward compatibility, you can still use `macunix` instead of
+`osxdarwin`.
+
+Notable use cases where `--disable-darwin` is turned out to be useful are:
+
+- When you want to use |x11-selection| instead of the system clipboard.
+- When you want to use |x11-clientserver|.
+
+Since both have to make use of X11 inter-client communication for them to work
+properly, and since the communication mechanism can come into conflict with
+the system clipboard, the darwin feature should be disabled to prevent Vim
+from hanging at runtime.
+
+
+ vim:tw=78:ts=8:noet:ft=help:norl:

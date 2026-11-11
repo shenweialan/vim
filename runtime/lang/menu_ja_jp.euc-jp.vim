@@ -1,13 +1,15 @@
 " vi:set ts=8 sts=8 sw=8 tw=0:
 "
 " Menu Translations:	Japanese (EUC-JP)
-" Last Translator:	MURAOKA Taro  <koron.kaoriya@gmail.com>
-" Last Change:		28-Jan-2016.
+" Last Translator:	MURAOKA Taro <koron.kaoriya@gmail.com>
+" Last Change:		18-Jan-2026.
 "
-" Copyright (C) 2001-2016 MURAOKA Taro <koron.kaoriya@gmail.com>,
-"			  vim-jp (http://vim-jp.org/)
+" Copyright (C) 2001-2026 MURAOKA Taro <koron.kaoriya@gmail.com>,
+"			  vim-jp <http://vim-jp.org/>
 "
 " THIS FILE IS DISTRIBUTED UNDER THE VIM LICENSE.
+"
+" Generated from menu_ja_jp.utf-8.vim, DO NOT EDIT
 
 " Quit when menu translations have already been done.
 if exists("did_menu_trans")
@@ -23,10 +25,10 @@ scriptencoding euc-jp
 menutrans &Help			¥Ø¥ë¥×(&H)
 menutrans &Overview<Tab><F1>	³µÎ¬(&O)<Tab><F1>
 menutrans &User\ Manual		¥æ¡¼¥¶¡¼¥Ş¥Ë¥å¥¢¥ë(&U)
-menutrans &How-to\ links	&How-to¥ê¥ó¥¯
+menutrans &How-To\ links	&How-to¥ê¥ó¥¯
 menutrans &Credits		¥¯¥ì¥¸¥Ã¥È(&C)
 menutrans Co&pying		Ãøºî¸¢¾ğÊó(&P)
-menutrans &Sponsor/Register	¥¹¥İ¥ó¥µ¡¼/ÅĞÏ¿(&S)
+menutrans &Sponsor		¥¹¥İ¥ó¥µ¡¼(&S)
 menutrans O&rphans		¸É»ù(&R)
 menutrans &Version		¥Ğ¡¼¥¸¥ç¥ó¾ğÊó(&V)
 menutrans &About		Vim¤Ë¤Ä¤¤¤Æ(&A)
@@ -37,7 +39,7 @@ let g:menutrans_help_dialog = "¥Ø¥ë¥×¤ò¸¡º÷¤·¤¿¤¤¥³¥Ş¥ó¥É¤â¤·¤¯¤ÏÃ±¸ì¤òÆşÎÏ¤·¤Æ¤
 menutrans &File				¥Õ¥¡¥¤¥ë(&F)
 menutrans &Open\.\.\.<Tab>:e		³«¤¯(&O)\.\.\.<Tab>:e
 menutrans Sp&lit-Open\.\.\.<Tab>:sp	Ê¬³ä¤·¤Æ³«¤¯(&L)\.\.\.<Tab>:sp
-menutrans Open\ Tab\.\.\.<Tab>:tabnew	¥¿¥Ö¥Ú¡¼¥¸¤Ç³«¤¯<Tab>:tabnew
+menutrans Open\ &Tab\.\.\.<Tab>:tabnew	¥¿¥Ö¥Ú¡¼¥¸¤Ç³«¤¯(&T)<Tab>:tabnew
 menutrans &New<Tab>:enew		¿·µ¬ºîÀ®(&N)<Tab>:enew
 menutrans &Close<Tab>:close		ÊÄ¤¸¤ë(&C)<Tab>:close
 menutrans &Save<Tab>:w			ÊİÂ¸(&S)<Tab>:w
@@ -73,9 +75,9 @@ menutrans Startup\ &Settings		µ¯Æ°»ş¤ÎÀßÄê(&S)
 menutrans &Global\ Settings		Á´ÂÎÀßÄê(&G)
 menutrans Toggle\ Pattern\ &Highlight<Tab>:set\ hls!
 	\	¥Ñ¥¿¡¼¥ó¶¯Ä´ÀÚÂØ(&H)<Tab>:set\ hls!
-menutrans Toggle\ &Ignore-case<Tab>:set\ ic!
+menutrans Toggle\ &Ignoring\ Case<Tab>:set\ ic!
 	\	Âç¾®Ê¸»ú¶èÊÌÀÚÂØ(&I)<Tab>:set\ ic!
-menutrans Toggle\ &Showmatch<Tab>:set\ sm!
+menutrans Toggle\ &Showing\ Matched\ Pairs<Tab>:set\ sm!
 	\	¥Ş¥Ã¥ÁÉ½¼¨ÀÚÂØ(&S)<Tab>:set\ sm!
 menutrans &Context\ lines		¥«¡¼¥½¥ë¼şÊÕ¹Ô¿ô(&C)
 menutrans &Virtual\ Edit		²¾ÁÛÊÔ½¸(&V)
@@ -86,7 +88,7 @@ menutrans Block\ and\ Insert		¥Ö¥í¥Ã¥¯/ÁŞÆş¥â¡¼¥É»ş
 menutrans Always			¾ï»ş
 menutrans Toggle\ Insert\ &Mode<Tab>:set\ im!
 	\	ÁŞÆş(½é¿´¼Ô)¥â¡¼¥ÉÀÚÂØ(&M)<Tab>:set\ im!
-menutrans Toggle\ Vi\ C&ompatible<Tab>:set\ cp!
+menutrans Toggle\ Vi\ C&ompatibility<Tab>:set\ cp!
 	\	Vi¸ß´¹¥â¡¼¥ÉÀÚÂØ(&O)<Tab>:set\ cp!
 menutrans Search\ &Path\.\.\.		¸¡º÷¥Ñ¥¹(&P)\.\.\.
 menutrans Ta&g\ Files\.\.\.		¥¿¥°¥Õ¥¡¥¤¥ë(&G)\.\.\.
@@ -106,19 +108,19 @@ let g:menutrans_tags_dialog = "¥¿¥°¥Õ¥¡¥¤¥ë¤ÎÌ¾Á°¤òÆşÎÏ¤·¤Æ¤¯¤À¤µ¤¤:\nÌ¾Á°¤Ï¥«¥ó
 menutrans F&ile\ Settings		¥Õ¥¡¥¤¥ëÀßÄê(&I)
 menutrans Toggle\ Line\ &Numbering<Tab>:set\ nu!
 	\	¹ÔÈÖ¹æÉ½¼¨ÀÚÂØ(&N)<Tab>:set\ nu!
-menutrans Toggle\ relati&ve\ Line\ Numbering<Tab>:set\ rnu!
+menutrans Toggle\ Relati&ve\ Line\ Numbering<Tab>:set\ rnu!
 	\	ÁêÂĞ¹ÔÈÖ¹æÉ½¼¨ÀÚÂØ(&V)<Tab>:set\ rnu!
 menutrans Toggle\ &List\ Mode<Tab>:set\ list!
 	\ ¥ê¥¹¥È¥â¡¼¥ÉÀÚÂØ(&L)<Tab>:set\ list!
-menutrans Toggle\ Line\ &Wrap<Tab>:set\ wrap!
+menutrans Toggle\ Line\ &Wrapping<Tab>:set\ wrap!
 	\	¹ÔÀŞÊÖ¤·ÀÚÂØ(&W)<Tab>:set\ wrap!
-menutrans Toggle\ W&rap\ at\ word<Tab>:set\ lbr!
+menutrans Toggle\ W&rapping\ at\ word<Tab>:set\ lbr!
 	\	Ã±¸ìÀŞÊÖ¤·ÀÚÂØ(&R)<Tab>:set\ lbr!
-menutrans Toggle\ &expand-tab<Tab>:set\ et!
+menutrans Toggle\ Tab\ &Expanding<Tab>:set\ et!
 	\	¥¿¥ÖÅ¸³«ÀÚÂØ(&E)<Tab>:set\ et!
-menutrans Toggle\ &auto-indent<Tab>:set\ ai!
+menutrans Toggle\ &Auto\ Indenting<Tab>:set\ ai!
 	\	¼«Æ°»ú²¼¤²ÀÚÂØ(&A)<Tab>:set\ ai!
-menutrans Toggle\ &C-indenting<Tab>:set\ cin!
+menutrans Toggle\ &C-Style\ Indenting<Tab>:set\ cin!
 	\	C¸À¸ì»ú²¼¤²ÀÚÂØ(&C)<Tab>:set\ cin!
 
 " other options
@@ -131,7 +133,9 @@ let g:menutrans_textwidth_dialog = "¥Æ¥­¥¹¥È¤ÎÉı('textwidth')¤òÀßÄê¤·¤Æ¤¯¤À¤µ¤¤ 
 let g:menutrans_fileformat_dialog = "¥Õ¥¡¥¤¥ë½ĞÎÏ¤Îºİ¤Î²ş¹Ôµ­¹æ¤Î·Á¼°¤òÁª¤ó¤Ç¤¯¤À¤µ¤¤."
 let g:menutrans_fileformat_choices = "&Unix\n&Dos\n&Mac\n¥­¥ã¥ó¥»¥ë(&C)"
 
+menutrans Show\ C&olor\ Schemes\ in\ Menu	¿§¥Æ¡¼¥Ş¤ò¥á¥Ë¥å¡¼¤ËÉ½¼¨(&O)
 menutrans C&olor\ Scheme		¿§¥Æ¡¼¥ŞÁªÂò(&O)
+menutrans Show\ &Keymaps\ in\ Menu	¥­¡¼¥Ş¥Ã¥×¤ò¥á¥Ë¥å¡¼¤ËÉ½¼¨(&K)
 menutrans &Keymap			¥­¡¼¥Ş¥Ã¥×(&K)
 menutrans None				¤Ê¤·
 
@@ -153,7 +157,8 @@ menutrans &Open<Tab>:copen		³«¤¯(&O)<Tab>:copen
 menutrans &Close<Tab>:cclose		ÊÄ¤¸¤ë(&C)<Tab>:cclose
 menutrans &Convert\ to\ HEX<Tab>:%!xxd	HEX¤ØÊÑ´¹(&C)<Tab>:%!xxd
 menutrans Conve&rt\ back<Tab>:%!xxd\ -r	HEX¤«¤éµÕÊÑ´¹(&R)<Tab>%!xxd\ -r
-menutrans Se&T\ Compiler		¥³¥ó¥Ñ¥¤¥éÀßÄê(&T)
+menutrans Show\ Compiler\ Se&ttings\ in\ Menu	¥³¥ó¥Ñ¥¤¥éÀßÄê¤ò¥á¥Ë¥å¡¼¤ËÉ½¼¨(&T)
+menutrans Se&t\ Compiler		¥³¥ó¥Ñ¥¤¥éÀßÄê(&T)
 
 " Tools.Spelling Menu
 menutrans &Spelling			¥¹¥Ú¥ê¥ó¥°(&S)
@@ -170,6 +175,10 @@ menutrans Set\ language\ to\ "en_gb"	¸À¸ì¤ò\ "en_gb"\ ¤ËÀßÄê¤¹¤ë
 menutrans Set\ language\ to\ "en_nz"	¸À¸ì¤ò\ "en_nz"\ ¤ËÀßÄê¤¹¤ë
 menutrans Set\ language\ to\ "en_us"	¸À¸ì¤ò\ "en_us"\ ¤ËÀßÄê¤¹¤ë
 menutrans &Find\ More\ Languages	Â¾¤Î¸À¸ì¤ò¸¡º÷¤¹¤ë(&F)
+
+let g:menutrans_spell_change_ARG_to = '"%s"\ ¤òÊÑ¹¹'
+let g:menutrans_spell_add_ARG_to_word_list = '"%s"\ ¤òÃ±¸ì¥ê¥¹¥È¤ËÄÉ²Ã'
+let g:menutrans_spell_ignore_ARG = '"%s"\ ¤òÌµ»ë'
 
 " Tools.Fold Menu
 menutrans &Folding			ÀŞ¾ö¤ß(&F)
@@ -207,8 +216,7 @@ menutrans &Delete		ºï½ü(&D)
 menutrans &Alternate		Î¢¤ØÀÚÂØ(&A)
 menutrans &Next			¼¡¤Î¥Ğ¥Ã¥Õ¥¡(&N)
 menutrans &Previous		Á°¤Î¥Ğ¥Ã¥Õ¥¡(&P)
-menutrans [No\ File]		[ÌµÂê]
-let g:menutrans_no_file = "[ÌµÂê]"
+let g:menutrans_no_file = "[ÌµÌ¾]"
 
 " Window menu
 menutrans &Window			¥¦¥£¥ó¥É¥¦(&W)
@@ -264,10 +272,9 @@ if has("toolbar")
     tmenu ToolBar.Cut		¥¯¥ê¥Ã¥×¥Ü¡¼¥É¤ØÀÚ¤ê¼è¤ê
     tmenu ToolBar.Copy		¥¯¥ê¥Ã¥×¥Ü¡¼¥É¤Ø¥³¥Ô¡¼
     tmenu ToolBar.Paste		¥¯¥ê¥Ã¥×¥Ü¡¼¥É¤«¤éÅ½¤êÉÕ¤±
-    tmenu ToolBar.Find		¸¡º÷...
+    tmenu ToolBar.Replace	¸¡º÷ / ÃÖ´¹...
     tmenu ToolBar.FindNext	¼¡¤ò¸¡º÷
     tmenu ToolBar.FindPrev	Á°¤ò¸¡º÷
-    tmenu ToolBar.Replace	ÃÖ´¹...
     if 0	" disabled; These are in the Windows menu
       tmenu ToolBar.New		¿·µ¬¥¦¥£¥ó¥É¥¦ºîÀ®
       tmenu ToolBar.WinSplit	¥¦¥£¥ó¥É¥¦Ê¬³ä
@@ -289,7 +296,7 @@ endif
 
 " Syntax menu
 menutrans &Syntax		¥·¥ó¥¿¥Ã¥¯¥¹(&S)
-menutrans &Show\ filetypes\ in\ menu	ÂĞ±ş·Á¼°¤ò¥á¥Ë¥å¡¼¤ËÉ½¼¨(&S)
+menutrans &Show\ File\ Types\ in\ Menu	ÂĞ±ş·Á¼°¤ò¥á¥Ë¥å¡¼¤ËÉ½¼¨(&S)
 menutrans Set\ '&syntax'\ only	'syntax'¤À¤±ÀßÄê(&S)
 menutrans Set\ '&filetype'\ too	'filetype'¤âÀßÄê(&F)
 menutrans &Off			Ìµ¸ú²½(&O)

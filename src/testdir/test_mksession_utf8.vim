@@ -3,9 +3,7 @@
 set encoding=utf-8
 scriptencoding utf-8
 
-if !has('multi_byte') || !has('mksession')
-  finish
-endif
+CheckFeature mksession
 
 func Test_mksession_utf8()
   tabnew
@@ -65,40 +63,84 @@ func Test_mksession_utf8()
   call wincol()
   mksession! test_mks.out
   let li = filter(readfile('test_mks.out'), 'v:val =~# "\\(^ *normal! 0\\|^ *exe ''normal!\\)"')
-  let expected = [
-    \   'normal! 016|',
-    \   'normal! 016|',
-    \   'normal! 016|',
-    \   'normal! 08|',
-    \   'normal! 08|',
-    \   'normal! 016|',
-    \   'normal! 016|',
-    \   'normal! 016|',
-    \   "  exe 'normal! ' . s:c . '|zs' . 16 . '|'",
-    \   "  normal! 016|",
-    \   "  exe 'normal! ' . s:c . '|zs' . 16 . '|'",
-    \   "  normal! 016|",
-    \   "  exe 'normal! ' . s:c . '|zs' . 16 . '|'",
-    \   "  normal! 016|",
-    \   "  exe 'normal! ' . s:c . '|zs' . 8 . '|'",
-    \   "  normal! 08|",
-    \   "  exe 'normal! ' . s:c . '|zs' . 8 . '|'",
-    \   "  normal! 08|",
-    \   "  exe 'normal! ' . s:c . '|zs' . 16 . '|'",
-    \   "  normal! 016|",
-    \   "  exe 'normal! ' . s:c . '|zs' . 16 . '|'",
-    \   "  normal! 016|",
-    \   "  exe 'normal! ' . s:c . '|zs' . 16 . '|'",
-    \   "  normal! 016|",
-    \   "  exe 'normal! ' . s:c . '|zs' . 16 . '|'",
-    \   "  normal! 016|"
-    \ ]
+  let expected =<< trim [DATA]
+    |
+      normal! 016|
+      normal! 016|
+      normal! 016|
+      normal! 08|
+      normal! 08|
+      normal! 016|
+      normal! 016|
+      normal! 016|
+        exe 'normal! ' .. c .. '|zs' .. 16 .. '|'
+        normal! 016|
+        exe 'normal! ' .. c .. '|zs' .. 16 .. '|'
+        normal! 016|
+        exe 'normal! ' .. c .. '|zs' .. 16 .. '|'
+        normal! 016|
+        exe 'normal! ' .. c .. '|zs' .. 8 .. '|'
+        normal! 08|
+        exe 'normal! ' .. c .. '|zs' .. 8 .. '|'
+        normal! 08|
+        exe 'normal! ' .. c .. '|zs' .. 16 .. '|'
+        normal! 016|
+        exe 'normal! ' .. c .. '|zs' .. 16 .. '|'
+        normal! 016|
+        exe 'normal! ' .. c .. '|zs' .. 16 .. '|'
+        normal! 016|
+        exe 'normal! ' .. c .. '|zs' .. 16 .. '|'
+        normal! 016|
+  [DATA]
+
+  " remove indent marker
+  call remove(expected, 0)
+
   call assert_equal(expected, li)
   tabclose!
 
   call delete('test_mks.out')
   call delete(tmpfile)
   let &wrap = wrap_save
+  set sessionoptions& splitbelow& fileencoding&
+endfunc
+
+func Test_session_multibyte_mappings()
+  " some characters readily available on european keyboards,
+  " as well as characters containing 0x80 or 0x9b bytes
+  let entries = [
+        \ ['n', 'ç', 'ç'],
+        \ ['n', 'º', 'º'],
+        \ ['n', '¡', '¡'],
+        \ ['n', '<M-ç>', '<M-ç>'],
+        \ ['n', '<M-º>', '<M-º>'],
+        \ ['n', '<M-¡>', '<M-¡>'],
+        \ ['n', '…', 'ě'],
+        \ ['n', 'ě', '…'],
+        \ ['n', '<M-…>', '<M-ě>'],
+        \ ['n', '<M-ě>', '<M-…>'],
+        \ ]
+  for entry in entries
+    exe entry[0] .. 'map ' .. entry[1] .. ' ' .. entry[2]
+  endfor
+
+  mkvimrc Xtestvimrc
+
+  nmapclear
+
+  for entry in entries
+    call assert_equal('', maparg(entry[1], entry[0]))
+  endfor
+
+  source Xtestvimrc
+
+  for entry in entries
+    call assert_equal(entry[2], maparg(entry[1], entry[0]))
+  endfor
+
+  nmapclear
+
+  call delete('Xtestvimrc')
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

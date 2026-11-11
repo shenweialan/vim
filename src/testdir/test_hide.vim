@@ -1,6 +1,6 @@
 " Tests for :hide command/modifier and 'hidden' option
 
-function SetUp()
+func SetUp()
   let s:save_hidden = &hidden
   let s:save_bufhidden = &bufhidden
   let s:save_autowrite = &autowrite
@@ -21,7 +21,7 @@ function Test_hide()
 
   new Xf1
   set modified
-  call assert_fails('edit Xf2')
+  call assert_fails('edit Xf2', 'E37: No write since last change (add ! to override)')
   bwipeout! Xf1
 
   new Xf1
@@ -37,7 +37,7 @@ function Test_hide()
   " :hide as a command
   hide
   call assert_equal([orig_bname, orig_winnr], [bufname(''), winnr('$')])
-  call assert_equal([1, 1], [buflisted('Xf1'), bufloaded('Xf1')])
+  call assert_equal([1, 1], ['Xf1'->buflisted(), 'Xf1'->bufloaded()])
   bwipeout! Xf1
 
   new Xf1

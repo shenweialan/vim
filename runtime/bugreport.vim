@@ -1,8 +1,9 @@
 :" Use this script to create the file "bugreport.txt", which contains
 :" information about the environment of a possible bug in Vim.
 :"
-:" Maintainer:	Bram Moolenaar <Bram@vim.org>
-:" Last change:	2005 Jun 12
+:" Maintainer:	The Vim Project <https://github.com/vim/vim>
+:" Last change:	2023 Aug 10
+:" Former Maintainer:	Bram Moolenaar <Bram@vim.org>
 :"
 :" To use inside Vim:
 :"	:so $VIMRUNTIME/bugreport.vim
@@ -54,9 +55,7 @@
 :endif
 :set all
 :set termcap
-:if has("autocmd")
-:  au
-:endif
+:au
 :if 1
 :  echo "--- Normal/Visual mode mappings ---"
 :endif
